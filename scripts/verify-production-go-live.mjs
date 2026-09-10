@@ -3,7 +3,7 @@
  * Verifies production readiness without altering or deleting production state.
  */
 
-const BASE_URL = process.env.APP_URL || "http://localhost:3000";
+const BASE_URL = (process.env.APP_URL || "http://localhost:3000").trim();
 
 async function run() {
   console.log("===============================================================================");

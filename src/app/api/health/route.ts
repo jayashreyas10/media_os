@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const correlationId = getCorrelationId(req.headers);
   const searchParams = req.nextUrl.searchParams;
-  const checkType = searchParams.get("check") || "readiness";
+  const checkType = searchParams.get("check") || "liveness";
 
   // Liveness Check: verifies that the HTTP server process is running and responding
   if (checkType === "liveness") {
