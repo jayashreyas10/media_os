@@ -2,10 +2,10 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "node scripts/prepare-db.js && npx prisma generate && npm run build"
+    "buildCommand": "node scripts/prepare-db.js && prisma generate && npm run build"
   },
   "deploy": {
-    "startCommand": "node scripts/prepare-db.js && npx prisma generate && npx prisma db push && npm start",
+    "startCommand": "node scripts/prepare-db.js && prisma generate && prisma db push && npm start",
     "healthcheckPath": "/api/health",
     "healthcheckTimeout": 120,
     "restartPolicyType": "ON_FAILURE",

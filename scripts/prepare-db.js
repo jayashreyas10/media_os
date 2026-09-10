@@ -22,8 +22,9 @@ if (dbUrl.startsWith("postgres://") || dbUrl.startsWith("postgresql://")) {
     fs.writeFileSync(schemaPath, schema, "utf8");
     console.log("[prepare-db] schema.prisma updated for SQLite.");
   }
-  // Ensure DATABASE_URL exists in .env if not set in environment
+  // Ensure DATABASE_URL exists in .env and prisma/.env if not set in environment
   const envPath = path.join(__dirname, "../.env");
+  const prismaEnvPath = path.join(__dirname, "../prisma/.env");
   if (!process.env.DATABASE_URL) {
     process.env.DATABASE_URL = "file:./dev.db";
     console.log("[prepare-db] DATABASE_URL missing from environment. Defaulted to file:./dev.db");
@@ -33,6 +34,14 @@ if (dbUrl.startsWith("postgres://") || dbUrl.startsWith("postgresql://")) {
       let envContent = fs.readFileSync(envPath, "utf8");
       if (!envContent.includes("DATABASE_URL=")) {
         fs.appendFileSync(envPath, '\nDATABASE_URL="file:./dev.db"\n', "utf8");
+      }
+    }
+    if (!fs.existsSync(prismaEnvPath)) {
+      fs.writeFileSync(prismaEnvPath, 'DATABASE_URL="file:./dev.db"\n', "utf8");
+    } else {
+      let prismaEnvContent = fs.readFileSync(prismaEnvPath, "utf8");
+      if (!prismaEnvContent.includes("DATABASE_URL=")) {
+        fs.appendFileSync(prismaEnvPath, '\nDATABASE_URL="file:./dev.db"\n', "utf8");
       }
     }
   }
