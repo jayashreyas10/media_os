@@ -23,7 +23,9 @@ import {
   ListOrdered,
   RefreshCw,
   FileEdit,
+  X,
 } from "lucide-react";
+
 import {
   CAMPAIGN_STAGES,
   STAGE_METADATA,
@@ -240,7 +242,63 @@ export default function CampaignDetailPage() {
     }
   };
 
+  const [manualStrategyModalOpen, setManualStrategyModalOpen] = useState(false);
+  const [manualHeadline, setManualHeadline] = useState("");
+  const [manualThesis, setManualThesis] = useState("");
+  const [manualTargetReader, setManualTargetReader] = useState("");
+  const [manualOutcome, setManualOutcome] = useState("");
+  const [manualTension, setManualTension] = useState("");
+  const [manualFormat, setManualFormat] = useState("YOUTUBE_LONG_FORM");
+  const [savingManualStrategy, setSavingManualStrategy] = useState(false);
+
+  const handleCreateManualStrategy = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualHeadline.trim() || !manualThesis.trim()) return;
+    try {
+      setSavingManualStrategy(true);
+      setErrorMsg("");
+      setSuccessMsg("");
+      const res = await fetch("/api/strategy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          campaignId: id,
+          isManual: true,
+          strategy: {
+            primaryHeadline: manualHeadline.trim(),
+            thesis: manualThesis.trim(),
+            targetReader: manualTargetReader.trim() || "Technical leaders & builders",
+            outcome: manualOutcome.trim() || "Strategic adoption & understanding",
+            centralTension: manualTension.trim() || "Incumbent complexity vs deterministic architecture",
+            flagshipFormat: manualFormat,
+            alternativeHeadlines: [],
+            keySections: [
+              { title: "The Problem", keyPoints: ["Context & limitations of status quo"], purpose: "Establish urgency" },
+              { title: "The Solution", keyPoints: ["Architectural breakdown"], purpose: "Provide resolution" },
+            ],
+            distributionEntryPoints: ["X Thread", "LinkedIn Article", "Newsletter summary"],
+          },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create manual strategy");
+      setSuccessMsg(`Manual strategy saved: "${data.strategy.primaryHeadline}"`);
+      setManualStrategyModalOpen(false);
+      setManualHeadline("");
+      setManualThesis("");
+      setManualTargetReader("");
+      setManualOutcome("");
+      setManualTension("");
+      await fetchCampaign();
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Error creating manual strategy");
+    } finally {
+      setSavingManualStrategy(false);
+    }
+  };
+
   const handleRunAgent = async (taskType: string, agentName: string) => {
+
     try {
       setExecutingAgent(taskType);
       setErrorMsg("");
@@ -451,6 +509,13 @@ export default function CampaignDetailPage() {
           </button>
 
           <button
+            onClick={() => setManualStrategyModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700 text-xs font-semibold transition-colors"
+          >
+            <span>✍️</span> Create Strategy Manually
+          </button>
+
+          <button
             onClick={handleRunStrategist}
             disabled={runningStrategist}
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors shadow-sm disabled:opacity-50"
@@ -460,7 +525,7 @@ export default function CampaignDetailPage() {
             ) : (
               <Target className="w-3.5 h-3.5" />
             )}
-            {runningStrategist ? "Synthesizing Thesis..." : "Run Content Strategist"}
+            {runningStrategist ? "Synthesizing Thesis..." : "Generate AI Strategy"}
           </button>
 
           <Link
@@ -920,6 +985,123 @@ export default function CampaignDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Manual Strategy Modal */}
+      {manualStrategyModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">✍️</span>
+                <h3 className="text-base font-semibold text-zinc-100">Create Strategy Manually</h3>
+              </div>
+              <button
+                onClick={() => setManualStrategyModalOpen(false)}
+                className="text-zinc-400 hover:text-white p-1 rounded-md"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateManualStrategy} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-zinc-300 font-medium mb-1">
+                  Primary Headline / Strategic Hook <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Deterministic State Machines Are Replacing Fragile LLM Chains"
+                  value={manualHeadline}
+                  onChange={(e) => setManualHeadline(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-md p-2.5 text-zinc-100 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-zinc-300 font-medium mb-1">
+                  Singular Thesis <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  rows={2}
+                  required
+                  placeholder="The central counter-intuitive argument that unifies this campaign..."
+                  value={manualThesis}
+                  onChange={(e) => setManualThesis(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-md p-2.5 text-zinc-100 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-300 font-medium mb-1">Target Reader</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Senior Backend & AI Engineers"
+                    value={manualTargetReader}
+                    onChange={(e) => setManualTargetReader(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-md p-2.5 text-zinc-100 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-300 font-medium mb-1">Flagship Format</label>
+                  <select
+                    value={manualFormat}
+                    onChange={(e) => setManualFormat(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-md p-2.5 text-zinc-100 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="YOUTUBE_LONG_FORM">YouTube Long-Form</option>
+                    <option value="NEWSLETTER">Newsletter</option>
+                    <option value="X_THREAD">X Thread</option>
+                    <option value="LINKEDIN_POST">LinkedIn Post</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-300 font-medium mb-1">Target Outcome</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Understand transition to state machines"
+                    value={manualOutcome}
+                    onChange={(e) => setManualOutcome(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-md p-2.5 text-zinc-100 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-300 font-medium mb-1">Central Tension</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Flexibility vs Reliability"
+                    value={manualTension}
+                    onChange={(e) => setManualTension(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-md p-2.5 text-zinc-100 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setManualStrategyModalOpen(false)}
+                  className="px-3.5 py-2 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingManualStrategy || !manualHeadline.trim() || !manualThesis.trim()}
+                  className="px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors disabled:opacity-50"
+                >
+                  {savingManualStrategy ? "Saving..." : "Save Manual Strategy"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

@@ -35,6 +35,31 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
+
+    // Manual Signal Creation workflow
+    if (body.isManual || body.action === "manual" || body.description) {
+      const signal = await SignalScoutService.addManualSignal(
+        session.workspace.id,
+        body.brandId || session.brand?.id,
+        {
+          title: body.title,
+          description: body.description || body.event || "",
+          source: body.source,
+          sourceUrl: body.sourceUrl,
+          observedAt: body.observedAt,
+          topic: body.topic,
+          relevance: body.relevance ?? body.opportunityScore,
+          notes: body.notes,
+          evidence: body.evidence,
+          campaignId: body.campaignId,
+        },
+        session.user.id
+      );
+
+      return NextResponse.json({ signal, isManual: true }, { status: 201 });
+    }
+
+    // AI-Assisted Signal Scout Scan
     const { topic, useLiveFetcher } = body;
 
     const result = await SignalScoutService.scanSignals(
@@ -45,9 +70,27 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ result });
   } catch (err) {
+    if (err instanceof Error && err.name === "AIDisabledError") {
+      return NextResponse.json(
+        {
+          error: err.message,
+          code: "AI_ASSISTANCE_DISABLED",
+          manualAvailable: true,
+        },
+        { status: 400 }
+      );
+    }
+
+    const isValidation =
+      err instanceof Error &&
+      (err.message.includes("Unsafe URL") ||
+        err.message.includes("Invalid protocol") ||
+        err.message.includes("Malformed URL") ||
+        err.message.includes("title is required"));
+
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Signal Scout scan failed" },
-      { status: 500 }
+      { error: err instanceof Error ? err.message : "Signal Scout failed" },
+      { status: isValidation ? 400 : 500 }
     );
   }
 }

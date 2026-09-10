@@ -405,4 +405,139 @@ export class EvidenceGraphService {
       where: { id },
     });
   }
+
+  /**
+   * Atomically creates a manual research bundle: Source, Claim (UNVERIFIED), and optional Evidence.
+   * Enforces evidence integrity: claim starts UNVERIFIED and is only verified if evidence quote
+   * matches source.rawContent.
+   */
+  static async addManualResearchBundle(
+    workspaceId: string,
+    input: {
+      campaignId?: string;
+      source: {
+        title: string;
+        url?: string;
+        publisher?: string;
+        publishDate?: string;
+        author?: string;
+        sourceNotes?: string;
+        rawContent?: string;
+        trustScore?: number;
+      };
+      claim: {
+        claimText: string;
+        isFact?: boolean;
+        confidence?: number;
+      };
+      evidence?: {
+        quoteSnippet: string;
+        context?: string;
+        pageOrTimestamp?: string;
+        supportStance?: SupportStance;
+      };
+    },
+    userId?: string
+  ) {
+    if (!input.source?.title) {
+      throw new Error("Source title is required");
+    }
+    if (!input.claim?.claimText) {
+      throw new Error("Claim text is required");
+    }
+
+    if (input.campaignId) {
+      const campaign = await prisma.campaign.findUnique({
+        where: { id: input.campaignId },
+        include: { brand: true },
+      });
+      if (!campaign || campaign.brand.workspaceId !== workspaceId) {
+        throw new Error(`Campaign ${input.campaignId} does not belong to authorized workspace`);
+      }
+    }
+
+    // 1. Create Source with strict URL validation
+    const source = await this.createSource({
+      workspaceId,
+      title: input.source.title,
+      url: input.source.url,
+      publisher: input.source.publisher,
+      publishDate: input.source.publishDate,
+      author: input.source.author,
+      sourceNotes: input.source.sourceNotes,
+      rawContent: input.source.rawContent,
+      trustScore: input.source.trustScore ?? 85,
+    });
+
+    // 2. Create Claim - INVARIANT: ALWAYS defaults to UNVERIFIED
+    const claim = await prisma.claim.create({
+      data: {
+        workspaceId,
+        campaignId: input.campaignId || null,
+        primarySourceId: source.id,
+        claimText: input.claim.claimText,
+        confidence: input.claim.confidence ?? 90,
+        isFact: input.claim.isFact !== false,
+        verificationStatus: "UNVERIFIED",
+      },
+      include: {
+        primarySource: true,
+        campaign: { select: { id: true, title: true } },
+      },
+    });
+
+    let attachedEvidence = null;
+
+    // 3. Attach Evidence if provided
+    if (input.evidence?.quoteSnippet) {
+      attachedEvidence = await this.attachEvidence(
+        {
+          claimId: claim.id,
+          sourceId: source.id,
+          quoteSnippet: input.evidence.quoteSnippet,
+          context: input.evidence.context,
+          pageOrTimestamp: input.evidence.pageOrTimestamp,
+          supportStance: input.evidence.supportStance || "SUPPORTS",
+        },
+        workspaceId
+      );
+    }
+
+    // Refresh claim to get updated verificationStatus after evidence evaluation
+    const updatedClaim = await this.getClaim(claim.id, workspaceId);
+
+    // Audit Log
+    let resolvedUserId: string | null = null;
+    if (userId) {
+      const user = await prisma.user.findFirst({
+        where: { OR: [{ id: userId }, { email: userId }] },
+        select: { id: true },
+      });
+      resolvedUserId = user?.id || null;
+    }
+
+    await prisma.auditLog.create({
+      data: {
+        workspaceId,
+        userId: resolvedUserId,
+        action: "MANUAL_RESEARCH_CREATED",
+        entityType: "Claim",
+        entityId: claim.id,
+        detailsJson: JSON.stringify({
+          sourceId: source.id,
+          sourceTitle: source.title,
+          claimId: claim.id,
+          verificationStatus: updatedClaim?.verificationStatus,
+          hasEvidence: Boolean(attachedEvidence),
+          isQuoteVerified: attachedEvidence?.isQuoteVerified ?? false,
+        }),
+      },
+    });
+
+    return {
+      source,
+      claim: updatedClaim || claim,
+      evidence: attachedEvidence,
+    };
+  }
 }

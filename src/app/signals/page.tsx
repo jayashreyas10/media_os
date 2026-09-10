@@ -14,6 +14,7 @@ import {
   RefreshCw,
   Layers,
   Search,
+  X,
 } from "lucide-react";
 
 interface SignalItem {
@@ -54,9 +55,56 @@ export default function SignalsPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  // Manual Signal Modal State
+  const [manualModalOpen, setManualModalOpen] = useState(false);
+  const [manualTitle, setManualTitle] = useState("");
+  const [manualContent, setManualContent] = useState("");
+  const [manualUrl, setManualUrl] = useState("");
+  const [manualTags, setManualTags] = useState("");
+  const [manualUrgency, setManualUrgency] = useState<"LOW" | "MEDIUM" | "HIGH">("MEDIUM");
+  const [manualAngle, setManualAngle] = useState("");
+  const [creatingManual, setCreatingManual] = useState(false);
+
   useEffect(() => {
     fetchSavedSignals();
   }, []);
+
+  async function handleCreateManualSignal(e: React.FormEvent) {
+    e.preventDefault();
+    if (!manualTitle.trim() || !manualContent.trim()) return;
+    setCreatingManual(true);
+    setErrorMessage(null);
+    try {
+      const res = await fetch("/api/signals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          isManual: true,
+          title: manualTitle.trim(),
+          content: manualContent.trim(),
+          url: manualUrl.trim() || undefined,
+          tags: manualTags ? manualTags.split(",").map((t) => t.trim()).filter(Boolean) : undefined,
+          urgency: manualUrgency,
+          suggestedAngle: manualAngle.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create manual signal");
+      setSuccessMessage(`Manual signal created: "${data.signal?.title || manualTitle}"`);
+      setManualModalOpen(false);
+      setManualTitle("");
+      setManualContent("");
+      setManualUrl("");
+      setManualTags("");
+      setManualAngle("");
+      fetchSavedSignals();
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : "Error creating signal");
+    } finally {
+      setCreatingManual(false);
+    }
+  }
+
 
   async function fetchSavedSignals() {
     try {
@@ -151,18 +199,26 @@ export default function SignalsPage() {
           </p>
         </div>
 
-        <button
-          onClick={() => handleScan()}
-          disabled={isScanning}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm transition-colors shadow-sm disabled:opacity-50"
-        >
-          {isScanning ? (
-            <RefreshCw className="w-4 h-4 animate-spin" />
-          ) : (
-            <Sparkles className="w-4 h-4" />
-          )}
-          {isScanning ? "Scanning Ecosystem..." : "Run Signal Scout"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setManualModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-medium text-sm transition-colors border border-zinc-700"
+          >
+            <span>✍️</span> Add Signal Manually
+          </button>
+          <button
+            onClick={() => handleScan()}
+            disabled={isScanning}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm transition-colors shadow-sm disabled:opacity-50"
+          >
+            {isScanning ? (
+              <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : (
+              <Sparkles className="w-4 h-4" />
+            )}
+            {isScanning ? "Scanning Ecosystem..." : "Scan with AI"}
+          </button>
+        </div>
       </div>
 
       {/* Alerts */}
@@ -398,6 +454,122 @@ export default function SignalsPage() {
           </div>
         )}
       </div>
+
+      {/* Manual Signal Modal */}
+      {manualModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">✍️</span>
+                <h3 className="text-base font-semibold text-zinc-100">Add Signal Manually</h3>
+              </div>
+              <button
+                onClick={() => setManualModalOpen(false)}
+                className="text-zinc-400 hover:text-white p-1 rounded-md"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateManualSignal} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-zinc-300 font-medium mb-1">
+                  Signal Title <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={manualTitle}
+                  onChange={(e) => setManualTitle(e.target.value)}
+                  placeholder="e.g. OpenAI releases Whisper v3 large-turbo"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-md p-2.5 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-zinc-300 font-medium mb-1">
+                  Content / Summary <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={manualContent}
+                  onChange={(e) => setManualContent(e.target.value)}
+                  placeholder="Detailed breakdown of the signal, key architectural notes, and industry context..."
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-md p-2.5 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-300 font-medium mb-1">Source URL (Optional)</label>
+                  <input
+                    type="url"
+                    value={manualUrl}
+                    onChange={(e) => setManualUrl(e.target.value)}
+                    placeholder="https://..."
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-md p-2.5 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-300 font-medium mb-1">Urgency</label>
+                  <select
+                    value={manualUrgency}
+                    onChange={(e) => setManualUrgency(e.target.value as any)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-md p-2.5 text-zinc-100 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="LOW">LOW</option>
+                    <option value="MEDIUM">MEDIUM</option>
+                    <option value="HIGH">HIGH</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-300 font-medium mb-1">Tags (comma-separated)</label>
+                  <input
+                    type="text"
+                    value={manualTags}
+                    onChange={(e) => setManualTags(e.target.value)}
+                    placeholder="ai, audio, open-source"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-md p-2.5 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-300 font-medium mb-1">Suggested Angle</label>
+                  <input
+                    type="text"
+                    value={manualAngle}
+                    onChange={(e) => setManualAngle(e.target.value)}
+                    placeholder="How this shifts latency economics"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-md p-2.5 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setManualModalOpen(false)}
+                  className="px-3.5 py-2 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingManual || !manualTitle.trim() || !manualContent.trim()}
+                  className="px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors disabled:opacity-50"
+                >
+                  {creatingManual ? "Saving..." : "Save Manual Signal"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

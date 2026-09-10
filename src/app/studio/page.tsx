@@ -128,7 +128,9 @@ export default function ContentStudioPage() {
   const [newAssetTitle, setNewAssetTitle] = useState("");
   const [newAssetType, setNewAssetType] = useState("YOUTUBE_LONG_FORM");
   const [newAssetCampaignId, setNewAssetCampaignId] = useState("");
+  const [creationMode, setCreationMode] = useState<"MANUAL" | "AI">("MANUAL");
   const [creating, setCreating] = useState(false);
+
 
   const fetchData = async () => {
     try {
@@ -181,6 +183,7 @@ export default function ContentStudioPage() {
           title: newAssetTitle,
           type: newAssetType,
           campaignId: newAssetCampaignId,
+          isManual: creationMode === "MANUAL",
         }),
       });
 
@@ -444,6 +447,47 @@ export default function ContentStudioPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                  Initial Workflow
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCreationMode("MANUAL")}
+                    className={`p-2.5 rounded-lg border text-left transition-all text-xs ${
+                      creationMode === "MANUAL"
+                        ? "bg-blue-950/60 border-blue-600 text-blue-200 ring-1 ring-blue-500"
+                        : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <div className="font-semibold flex items-center gap-1.5">
+                      <span>✍️</span> Write from Scratch
+                    </div>
+                    <div className="text-[10px] text-zinc-400 mt-0.5">
+                      Initialize standard blocks for manual writing
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCreationMode("AI")}
+                    className={`p-2.5 rounded-lg border text-left transition-all text-xs ${
+                      creationMode === "AI"
+                        ? "bg-purple-950/60 border-purple-600 text-purple-200 ring-1 ring-purple-500"
+                        : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <div className="font-semibold flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-purple-400" /> Draft with AI
+                    </div>
+                    <div className="text-[10px] text-zinc-400 mt-0.5">
+                      Synthesize initial draft using Writer agent
+                    </div>
+                  </button>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800">

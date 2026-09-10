@@ -70,7 +70,7 @@ export default function EvidenceGraphPage() {
   const [newClaimText, setNewClaimText] = useState("");
   const [newClaimConfidence, setNewClaimConfidence] = useState(95);
   const [newClaimSourceId, setNewClaimSourceId] = useState("");
-  const [newClaimStatus, setNewClaimStatus] = useState<"VERIFIED" | "UNVERIFIED" | "CONTRADICTED">("VERIFIED");
+  const [newClaimStatus, setNewClaimStatus] = useState<"VERIFIED" | "UNVERIFIED" | "CONTRADICTED">("UNVERIFIED");
 
   // New Source State
   const [newSourceTitle, setNewSourceTitle] = useState("");
@@ -83,6 +83,64 @@ export default function EvidenceGraphPage() {
   const [newEvidenceQuote, setNewEvidenceQuote] = useState("");
   const [newEvidenceContext, setNewEvidenceContext] = useState("");
   const [newEvidenceStance, setNewEvidenceStance] = useState<"SUPPORTS" | "CONTRADICTS" | "CONTEXTUALIZES" | "DOES_NOT_SUPPORT">("SUPPORTS");
+
+  // Manual Research Bundle State
+  const [bundleModalOpen, setBundleModalOpen] = useState(false);
+  const [bundleSourceTitle, setBundleSourceTitle] = useState("");
+  const [bundleSourceUrl, setBundleSourceUrl] = useState("");
+  const [bundleSourceAuthor, setBundleSourceAuthor] = useState("");
+  const [bundleClaimText, setBundleClaimText] = useState("");
+  const [bundleQuote, setBundleQuote] = useState("");
+  const [bundleSubmitting, setBundleSubmitting] = useState(false);
+
+  const handleCreateBundle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bundleSourceTitle.trim() || !bundleClaimText.trim()) return;
+    try {
+      setBundleSubmitting(true);
+      const res = await fetch("/api/research", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          isManual: true,
+          source: {
+            title: bundleSourceTitle.trim(),
+            url: bundleSourceUrl.trim() || undefined,
+            author: bundleSourceAuthor.trim() || undefined,
+            trustScore: 90,
+          },
+          claim: {
+            claimText: bundleClaimText.trim(),
+            confidence: 95,
+            isFact: true,
+          },
+          evidence: bundleQuote.trim()
+            ? {
+                quoteSnippet: bundleQuote.trim(),
+                supportStance: "SUPPORTS",
+              }
+            : undefined,
+        }),
+      });
+      if (res.ok) {
+        setBundleModalOpen(false);
+        setBundleSourceTitle("");
+        setBundleSourceUrl("");
+        setBundleSourceAuthor("");
+        setBundleClaimText("");
+        setBundleQuote("");
+        fetchData();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to create manual research bundle");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error creating manual research bundle");
+    } finally {
+      setBundleSubmitting(false);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -209,8 +267,14 @@ export default function EvidenceGraphPage() {
 
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setBundleModalOpen(true)}
+            className="bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-xs font-semibold px-3.5 py-2 rounded-lg transition-colors flex items-center gap-1.5 border border-zinc-700"
+          >
+            <span>✍️</span> Add Source & Evidence Manually
+          </button>
+          <button
             onClick={() => setSourceModalOpen(true)}
-            className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium px-3.5 py-2 rounded-lg transition-colors flex items-center gap-1.5 border border-zinc-700"
+            className="bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-medium px-3.5 py-2 rounded-lg transition-colors flex items-center gap-1.5 border border-zinc-800"
           >
             <BookOpen className="w-3.5 h-3.5 text-blue-400" />
             Register Source
@@ -713,6 +777,115 @@ export default function EvidenceGraphPage() {
           </div>
         </div>
       )}
+
+      {/* Modal: Manual Research Bundle */}
+      {bundleModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">✍️</span>
+                <h2 className="text-base font-bold text-white">Add Source & Evidence Manually</h2>
+              </div>
+              <button onClick={() => setBundleModalOpen(false)} className="text-zinc-400 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateBundle} className="space-y-3.5 text-xs">
+              <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-lg p-3 space-y-2">
+                <h4 className="font-semibold text-zinc-300 flex items-center gap-1.5">
+                  <BookOpen className="w-3.5 h-3.5 text-blue-400" />
+                  Primary Source Details
+                </h4>
+                <div>
+                  <label className="block text-zinc-400 mb-1">Source Title *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Meta LLaMA 3 Architecture Technical Report"
+                    value={bundleSourceTitle}
+                    onChange={(e) => setBundleSourceTitle(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 text-zinc-100 p-2 rounded-md focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-zinc-400 mb-1">URL (Optional)</label>
+                    <input
+                      type="url"
+                      placeholder="https://..."
+                      value={bundleSourceUrl}
+                      onChange={(e) => setBundleSourceUrl(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 text-zinc-100 p-2 rounded-md focus:outline-none focus:border-blue-500 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-zinc-400 mb-1">Author / Org (Optional)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. AI Research Group"
+                      value={bundleSourceAuthor}
+                      onChange={(e) => setBundleSourceAuthor(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 text-zinc-100 p-2 rounded-md focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-lg p-3 space-y-2">
+                <h4 className="font-semibold text-zinc-300 flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
+                  Claim (Defaults to UNVERIFIED)
+                </h4>
+                <div>
+                  <label className="block text-zinc-400 mb-1">Claim Statement *</label>
+                  <textarea
+                    rows={2}
+                    required
+                    placeholder="e.g. KV-cache compression reduces memory bandwidth requirements by 4x..."
+                    value={bundleClaimText}
+                    onChange={(e) => setBundleClaimText(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 text-zinc-100 p-2 rounded-md focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-lg p-3 space-y-2">
+                <h4 className="font-semibold text-zinc-300 flex items-center gap-1.5">
+                  <FileCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  Direct Grounding Quote (Optional)
+                </h4>
+                <textarea
+                  rows={2}
+                  placeholder="Verbatim quote from source grounding this claim..."
+                  value={bundleQuote}
+                  onChange={(e) => setBundleQuote(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-800 text-zinc-100 p-2 rounded-md focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setBundleModalOpen(false)}
+                  className="px-3 py-2 rounded-lg bg-zinc-800 text-zinc-300 font-medium hover:bg-zinc-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={bundleSubmitting || !bundleSourceTitle.trim() || !bundleClaimText.trim()}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-500 disabled:opacity-50"
+                >
+                  {bundleSubmitting ? "Creating..." : "Save Manual Research Bundle"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

@@ -16,9 +16,19 @@ export class StrategyRecommendationService {
    * Accepting or rejecting NEVER silently modifies Brand Brain.
    */
   static async reviewRecommendation(
-    workspaceId: string,
-    input: ReviewRecommendationInput
+    workspaceIdOrInput: string | (ReviewRecommendationInput & { workspaceId: string }),
+    inputOrUndefined?: ReviewRecommendationInput
   ) {
+    let workspaceId: string;
+    let input: ReviewRecommendationInput;
+    if (typeof workspaceIdOrInput === "string") {
+      workspaceId = workspaceIdOrInput;
+      input = inputOrUndefined!;
+    } else {
+      workspaceId = workspaceIdOrInput.workspaceId;
+      input = workspaceIdOrInput;
+    }
+
     const recommendation = await prisma.strategyRecommendation.findUnique({
       where: { id: input.recommendationId },
       include: {
@@ -128,5 +138,90 @@ export class StrategyRecommendationService {
       },
       orderBy: { createdAt: "desc" },
     });
+  }
+
+  /**
+   * Manually creates a strategy recommendation by human operator.
+   * INVARIANT: Always starts in PENDING status; requires human operator decision gate.
+   * Never silently mutates Brand Brain.
+   */
+  static async createManualRecommendation(
+    workspaceId: string,
+    data: {
+      brandId: string;
+      title: string;
+      recommendation: string;
+      actionType?: string;
+      targetFormat?: string;
+      targetPillar?: string;
+      rationale?: string;
+      learningId?: string;
+    },
+    userId?: string
+  ) {
+    if (!data.title || data.title.trim().length === 0) {
+      throw new Error("Title is required");
+    }
+    if (!data.recommendation || data.recommendation.trim().length === 0) {
+      throw new Error("Recommendation text is required");
+    }
+
+    const brand = await prisma.brand.findUnique({
+      where: { id: data.brandId },
+    });
+    if (!brand || brand.workspaceId !== workspaceId) {
+      throw new Error("Brand not found in authorized workspace");
+    }
+
+    let learningId = data.learningId;
+    if (!learningId) {
+      const anchorLearning = await prisma.learningRecord.create({
+        data: {
+          workspaceId,
+          brandId: data.brandId,
+          category: data.targetPillar ? "PILLAR" : "FORMAT",
+          sentiment: "OPPORTUNITY",
+          observation: `Operator strategic recommendation: ${data.title.trim()}`,
+          hypothesis: data.rationale || "Direct operator strategy input",
+          sampleSize: 1,
+          confidenceScore: 100,
+          statisticalSignificance: "ANECDOTAL",
+          supportingMetricsJson: "{}",
+          limitations: "Manual operator strategy guidance; unassisted by automated metrics.",
+          dataSourcesJson: JSON.stringify(["MANUAL_OPERATOR"]),
+          status: "ACTIVE",
+        },
+      });
+      learningId = anchorLearning.id;
+    }
+
+    const created = await prisma.strategyRecommendation.create({
+      data: {
+        workspaceId,
+        brandId: data.brandId,
+        learningId,
+        title: data.title.trim(),
+        recommendation: data.recommendation.trim(),
+        actionType: data.actionType || "ITERATE",
+        targetFormat: data.targetFormat || null,
+        targetPillar: data.targetPillar || null,
+        status: "PENDING", // STRICT: Always starts PENDING
+      },
+    });
+
+    await AuditService.log({
+      workspaceId,
+      userId: userId || null,
+      action: "MANUAL_RECOMMENDATION_CREATED",
+      entityType: "StrategyRecommendation",
+      entityId: created.id,
+      details: {
+        title: created.title,
+        actionType: created.actionType,
+        status: "PENDING",
+      },
+    });
+
+    return created;
   }
 }

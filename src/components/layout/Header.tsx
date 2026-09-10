@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Search, Plus, Sparkles, Menu, X, User } from "lucide-react";
 import { CommandCenterModal } from "./CommandCenterModal";
+import { AIStatusBadge } from "./AIStatusBadge";
 
 export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void }) {
   const [commandCenterOpen, setCommandCenterOpen] = useState(false);
@@ -31,7 +32,13 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
               TechOperator Media
             </span>
           </div>
+
+          {/* AI Status Badge */}
+          <div className="hidden sm:block">
+            <AIStatusBadge />
+          </div>
         </div>
+
 
         {/* Center/Right: Command Center Trigger & Actions */}
         <div className="flex items-center gap-2 sm:gap-3">

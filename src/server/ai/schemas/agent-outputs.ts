@@ -56,18 +56,19 @@ export const StrategyOutputSchema = z.object({
   outcome: z.string(),
   centralTension: z.string(),
   thesis: z.string(),
-  whyNow: z.string(),
+  whyNow: z.string().default(""),
   flagshipFormat: z.string(),
   primaryHeadline: z.string(),
-  alternativeHeadlines: z.array(z.string()),
+  alternativeHeadlines: z.array(z.string()).default([]),
   keySections: z.array(
     z.object({
       title: z.string(),
-      keyPoints: z.array(z.string()),
-      purpose: z.string(),
-    })
+      keyPoints: z.array(z.string()).optional(),
+      purpose: z.string().optional(),
+    }).passthrough()
   ),
   distributionEntryPoints: z.array(z.string()),
+  metadata: z.record(z.any()).optional(),
 });
 export type StrategyOutput = z.infer<typeof StrategyOutputSchema>;
 

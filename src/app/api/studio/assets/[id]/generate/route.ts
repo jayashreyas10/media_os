@@ -30,6 +30,17 @@ export async function POST(
 
     return NextResponse.json({ version }, { status: 200 });
   } catch (err) {
+    if (err instanceof Error && err.name === "AIDisabledError") {
+      return NextResponse.json(
+        {
+          error: err.message,
+          code: "AI_ASSISTANCE_DISABLED",
+          manualAvailable: true,
+        },
+        { status: 400 }
+      );
+    }
+
     if (err instanceof RateLimitError) {
       return NextResponse.json(
         { error: err.message, code: err.code, retryAfter: err.retryAfterSeconds },

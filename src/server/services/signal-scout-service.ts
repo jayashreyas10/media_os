@@ -4,6 +4,7 @@ import { ProviderFactory } from "../ai/provider-factory";
 import { MockResearchTool, LiveWebFetcher, wrapUntrustedContent } from "../ai/research-tool";
 import { SignalScoutOutput, SignalScoutOutputSchema } from "../ai/schemas/agent-outputs";
 import { KnowledgeBaseService } from "./knowledge-service";
+import { validateAndNormalizeUrl } from "./evidence-graph-service";
 
 export interface ScanSignalsOptions {
   topic?: string;
@@ -159,5 +160,122 @@ export class SignalScoutService {
     });
 
     return campaign;
+  }
+
+  /**
+   * Manually adds a human-observed signal without AI assistance.
+   * Enforces URL sanitization, workspace tenancy, and audit logging.
+   */
+  static async addManualSignal(
+    workspaceId: string,
+    brandId: string | undefined,
+    data: {
+      title: string;
+      description: string;
+      source?: string;
+      sourceUrl?: string;
+      observedAt?: string | Date;
+      topic?: string;
+      relevance?: number;
+      notes?: string;
+      evidence?: string;
+      campaignId?: string;
+    },
+    userId?: string
+  ) {
+    if (!data.title || data.title.trim().length === 0) {
+      throw new Error("Signal title is required");
+    }
+
+    // Tenancy checks
+    if (brandId) {
+      const brand = await prisma.brand.findFirst({
+        where: { id: brandId, workspaceId },
+      });
+      if (!brand) {
+        throw new Error("Brand not found in authorized workspace");
+      }
+    }
+
+    if (data.campaignId) {
+      const campaign = await prisma.campaign.findFirst({
+        where: { id: data.campaignId, brand: { workspaceId } },
+      });
+      if (!campaign) {
+        throw new Error("Campaign not found in authorized workspace");
+      }
+    }
+
+    // URL validation using standard Evidence Graph sanitization
+    const sanitizedUrl = validateAndNormalizeUrl(data.sourceUrl);
+
+    const relevance = Math.min(10, Math.max(1, data.relevance ?? 8));
+    const observedDate = data.observedAt ? new Date(data.observedAt).toISOString() : new Date().toISOString();
+
+    const formattedContent = [
+      `Description / Event: ${data.description}`,
+      data.source ? `Source: ${data.source}` : null,
+      sanitizedUrl ? `Source URL: ${sanitizedUrl}` : null,
+      `Observed At: ${observedDate}`,
+      `Category / Topic: ${data.topic || "General"}`,
+      `Audience Relevance: ${relevance}/10`,
+      data.notes ? `Operator Notes: ${data.notes}` : null,
+      data.evidence ? `Supporting Evidence: ${data.evidence}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const item = await KnowledgeBaseService.createItem({
+      workspaceId,
+      brandId: brandId || undefined,
+      title: `Signal: ${data.title.trim()}`,
+      content: formattedContent,
+      type: "RESEARCH",
+      sourceUrl: sanitizedUrl || undefined,
+      tags: `signal,manual,relevance:${relevance},topic:${(data.topic || "general").toLowerCase().trim()}`,
+      confidence: relevance * 10,
+    });
+
+    let resolvedUserId: string | null = null;
+    if (userId) {
+      const user = await prisma.user.findFirst({
+        where: { OR: [{ id: userId }, { email: userId }] },
+        select: { id: true },
+      });
+      resolvedUserId = user?.id || null;
+    }
+
+    await prisma.auditLog.create({
+      data: {
+        workspaceId,
+        userId: resolvedUserId,
+        action: "MANUAL_SIGNAL_CREATED",
+        entityType: "KnowledgeItem",
+        entityId: item.id,
+        detailsJson: JSON.stringify({
+          title: data.title,
+          source: data.source,
+          sourceUrl: sanitizedUrl,
+          relevance,
+          topic: data.topic,
+          campaignId: data.campaignId,
+        }),
+      },
+    });
+
+    return {
+      id: item.id,
+      workspaceId,
+      brandId: brandId || null,
+      title: data.title,
+      event: data.description,
+      whyNow: data.notes || "Manual operator observation",
+      suggestedAngle: data.topic || "General Analysis",
+      opportunityScore: relevance,
+      audienceRelevance: relevance,
+      sourceUrl: sanitizedUrl,
+      isManual: true,
+      createdAt: item.createdAt,
+    };
   }
 }

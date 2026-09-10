@@ -37,13 +37,27 @@ export async function POST(req: NextRequest) {
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await req.json();
-    const { campaignId, type, title, strategyId } = body;
+    const { campaignId, type, title, strategyId, isManual, initialBlocks } = body;
 
     if (!campaignId || !type || !title) {
       return NextResponse.json(
         { error: "campaignId, type, and title are required" },
         { status: 400 }
       );
+    }
+
+    if (isManual || initialBlocks) {
+      const asset = await ContentStudioService.createManualDraft({
+        workspaceId: session.workspace.id,
+        campaignId,
+        type,
+        title,
+        strategyId,
+        createdBy: session.user.email,
+        initialBlocks,
+      });
+
+      return NextResponse.json({ asset, isManual: true }, { status: 201 });
     }
 
     const asset = await ContentStudioService.createAsset({

@@ -247,4 +247,112 @@ export class LearningEngineService {
       orderBy: { createdAt: "desc" },
     });
   }
+
+  /**
+   * Manually creates a learning record with strict statistical governance:
+   * N < 3 -> ANECDOTAL
+   * 3 <= N < 10 -> DIRECTIONAL
+   * N >= 10 without proof -> ELIGIBLE_FOR_TESTING
+   * N >= 10 with valid proof -> STATISTICALLY_SIGNIFICANT
+   */
+  static async createManualLearning(
+    workspaceId: string,
+    brandId: string,
+    data: {
+      category: string;
+      sentiment: "POSITIVE" | "NEGATIVE" | "NEUTRAL";
+      observation: string;
+      hypothesis: string;
+      recommendation?: string;
+      sampleSize?: number;
+      confidence?: number;
+      limitations?: string;
+      supportingMetrics?: Record<string, unknown>;
+      hasStatisticalProof?: boolean;
+      campaignId?: string;
+      contentAssetId?: string;
+    },
+    userId?: string
+  ) {
+    if (!data.observation || data.observation.trim().length === 0) {
+      throw new Error("Observation is required");
+    }
+    if (!data.hypothesis || data.hypothesis.trim().length === 0) {
+      throw new Error("Hypothesis is required");
+    }
+
+    const brand = await prisma.brand.findUnique({
+      where: { id: brandId },
+    });
+    if (!brand || brand.workspaceId !== workspaceId) {
+      throw new Error("Brand not found in authorized workspace");
+    }
+
+    const sampleSize = Math.max(1, data.sampleSize ?? 1);
+    const hasStatisticalProof = Boolean(data.hasStatisticalProof);
+    const significance = this.evaluateSignificance(sampleSize, hasStatisticalProof);
+
+    const confidenceScore = Math.min(
+      100,
+      Math.max(1, (data as any).confidenceScore ?? data.confidence ?? 80)
+    );
+
+    const learning = await prisma.learningRecord.create({
+      data: {
+        workspaceId,
+        brandId,
+        campaignId: data.campaignId || null,
+        contentAssetId: data.contentAssetId || null,
+        category: data.category || "AUDIENCE_PREFERENCE",
+        sentiment: data.sentiment || "NEUTRAL",
+        observation: data.observation.trim(),
+        hypothesis: data.hypothesis.trim(),
+        sampleSize,
+        confidenceScore,
+        statisticalSignificance: significance,
+        supportingMetricsJson: JSON.stringify(data.supportingMetrics || {}),
+        limitations:
+          data.limitations ||
+          "Manual operator observation; statistical validity constrained by sample size.",
+        dataSourcesJson: JSON.stringify(["MANUAL_OPERATOR"]),
+        status: "ACTIVE",
+      },
+    });
+
+    let recommendationRecord = null;
+    if (data.recommendation && data.recommendation.trim().length > 0) {
+      recommendationRecord = await prisma.strategyRecommendation.create({
+        data: {
+          workspaceId,
+          brandId,
+          learningId: learning.id,
+          title: `Action from Learning: ${data.category}`,
+          recommendation: data.recommendation.trim(),
+          actionType: "ITERATE",
+          status: "PENDING", // STRICT: starts in PENDING for human review
+        },
+      });
+    }
+
+    await AuditService.log({
+      workspaceId,
+      userId: userId || null,
+      action: "MANUAL_LEARNING_CREATED",
+      entityType: "LearningRecord",
+      entityId: learning.id,
+      details: {
+        category: data.category,
+        significance,
+        sampleSize,
+        hasStatisticalProof,
+        hasRecommendation: Boolean(recommendationRecord),
+      },
+    });
+
+    return Object.assign(learning, {
+      recommendationRecord,
+      recommendation: recommendationRecord,
+      learning,
+    });
+  }
 }

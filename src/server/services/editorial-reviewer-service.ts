@@ -466,4 +466,185 @@ export class EditorialReviewerService {
       },
     });
   }
+
+  /**
+   * Performs a structured manual human editorial review.
+   * INVARIANT: Editorial review PASS sets status to REVIEW_PASSED, but NEVER automatically approves content.
+   * Final human approval remains governed by the mandatory human approval gate (ApprovalService).
+   */
+  static async performHumanReview(input: {
+    workspaceId: string;
+    assetId: string;
+    versionId?: string;
+    userId: string;
+    verdict: "PASS" | "REQUEST_REVISION" | "FAIL";
+    summary?: string;
+    scores?: {
+      evidenceScore?: number;
+      brandScore?: number;
+      qualityScore?: number;
+      formatScore?: number;
+      overallScore?: number;
+    };
+    findings?: Array<{
+      category: string;
+      severity: "INFO" | "WARNING" | "ERROR" | "CRITICAL";
+      blockId?: string | null;
+      claimId?: string | null;
+      description: string;
+      evidence?: string | null;
+      recommendation: string;
+      requiresRevision?: boolean;
+    }>;
+  }) {
+    const { workspaceId, assetId, versionId, userId, verdict, summary, scores, findings = [] } = input;
+
+    const asset = await prisma.contentAsset.findUnique({
+      where: { id: assetId },
+      include: { brand: true, campaign: true },
+    });
+
+    if (!asset || asset.workspaceId !== workspaceId) {
+      throw new Error(`ContentAsset ${assetId} not found in workspace`);
+    }
+
+    const targetVersionId = versionId || asset.currentVersionId;
+    if (!targetVersionId) {
+      throw new Error(`Asset ${assetId} has no version to review`);
+    }
+
+    const version = await prisma.contentVersion.findUnique({
+      where: { id: targetVersionId },
+      include: {
+        blocks: { orderBy: { orderIndex: "asc" } },
+      },
+    });
+
+    if (!version || version.assetId !== assetId) {
+      throw new Error(`ContentVersion ${targetVersionId} not found for asset`);
+    }
+
+    // Determine blockers
+    const hasBlockers =
+      verdict === "REQUEST_REVISION" ||
+      verdict === "FAIL" ||
+      findings.some((f) => f.severity === "ERROR" || f.severity === "CRITICAL" || f.requiresRevision);
+
+    const reviewStatus = verdict === "PASS" ? "PASSED" : verdict === "FAIL" ? "FAILED" : "REVISION_REQUIRED";
+
+    const defaultScores = {
+      evidenceScore: 90,
+      brandScore: 90,
+      qualityScore: 90,
+      formatScore: 90,
+      overallScore: verdict === "PASS" ? 95 : 65,
+    };
+
+    const compositeScores = {
+      ...defaultScores,
+      ...(scores || {}),
+    };
+
+    const reviewSummary =
+      summary ||
+      (verdict === "PASS"
+        ? "Human editorial reviewer verified and approved content quality standards. Ready for formal approval gate."
+        : `Human editorial reviewer requested revisions: ${findings.length} finding(s) logged.`);
+
+    // Persist Editorial Review with reviewerType = "HUMAN"
+    const review = await prisma.editorialReview.create({
+      data: {
+        workspaceId,
+        brandId: asset.brandId,
+        campaignId: asset.campaignId,
+        contentAssetId: asset.id,
+        contentVersionId: version.id,
+        reviewerType: "HUMAN",
+        status: reviewStatus,
+        verdict,
+        overallScore: compositeScores.overallScore,
+        scoresJson: JSON.stringify(compositeScores),
+        summary: reviewSummary,
+        findingsJson: JSON.stringify(findings),
+        metricsJson: JSON.stringify({ reviewer: userId, mode: "MANUAL_HUMAN_REVIEW" }),
+        completedAt: new Date(),
+      },
+    });
+
+    // Spawn RevisionRequests for findings requiring revision
+    const revisionRequestsToCreate = findings
+      .filter((f) => f.requiresRevision || f.severity === "ERROR" || f.severity === "CRITICAL" || verdict !== "PASS")
+      .map((f) => ({
+        reviewId: review.id,
+        contentVersionId: version.id,
+        blockId: f.blockId || null,
+        category: f.category || "EDITORIAL_QUALITY",
+        severity: f.severity || "WARNING",
+        instruction: `${f.description}${f.recommendation ? ` -> Fix: ${f.recommendation}` : ""}`,
+        status: "OPEN",
+      }));
+
+    if (revisionRequestsToCreate.length > 0) {
+      await prisma.revisionRequest.createMany({
+        data: revisionRequestsToCreate,
+      });
+    }
+
+    // Transition ContentAsset status:
+    // INVARIANT: "PASS" transitions to "REVIEW_PASSED", NEVER automatically to "APPROVED".
+    const targetAssetStatus = verdict === "PASS" ? "REVIEW_PASSED" : "REVISION_REQUIRED";
+    await prisma.contentAsset.update({
+      where: { id: asset.id },
+      data: { status: targetAssetStatus },
+    });
+
+    // Record in ApprovalRecord audit log
+    await prisma.approvalRecord.create({
+      data: {
+        workspaceId,
+        brandId: asset.brandId,
+        campaignId: asset.campaignId,
+        contentAssetId: asset.id,
+        contentVersionId: version.id,
+        reviewId: review.id,
+        action: verdict === "PASS" ? "REVIEW_PASSED" : "REVISION_REQUESTED",
+        comment: reviewSummary,
+      },
+    });
+
+    let resolvedUserId: string | null = null;
+    if (userId) {
+      const user = await prisma.user.findFirst({
+        where: { OR: [{ id: userId }, { email: userId }] },
+        select: { id: true },
+      });
+      resolvedUserId = user?.id || null;
+    }
+
+    await prisma.auditLog.create({
+      data: {
+        workspaceId,
+        userId: resolvedUserId,
+        action: "HUMAN_EDITORIAL_REVIEW_COMPLETED",
+        entityType: "EditorialReview",
+        entityId: review.id,
+        detailsJson: JSON.stringify({
+          verdict,
+          status: reviewStatus,
+          overallScore: compositeScores.overallScore,
+          openRevisionRequests: revisionRequestsToCreate.length,
+          reviewer: userId,
+        }),
+      },
+    });
+
+    return await prisma.editorialReview.findUnique({
+      where: { id: review.id },
+      include: {
+        revisionRequests: true,
+        contentVersion: { select: { id: true, versionNumber: true } },
+        contentAsset: { select: { id: true, title: true, status: true, type: true } },
+      },
+    });
+  }
 }

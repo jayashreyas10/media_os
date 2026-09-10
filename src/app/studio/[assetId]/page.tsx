@@ -166,7 +166,19 @@ export default function StudioAssetEditorPage() {
   const [publishing, setPublishing] = useState(false);
   const [latestPublishRecord, setLatestPublishRecord] = useState<any>(null);
 
+  // Human Editorial Review Modal State
+  const [humanReviewModalOpen, setHumanReviewModalOpen] = useState(false);
+  const [humanVerdict, setHumanVerdict] = useState<"PASS" | "REQUEST_REVISION" | "FAIL">("PASS");
+  const [humanReviewSummary, setHumanReviewSummary] = useState("");
+  const [humanReviewScore, setHumanReviewScore] = useState(90);
+  const [humanReviewing, setHumanReviewing] = useState(false);
+
+  // Publishing Preview State
+  const [publishPreview, setPublishPreview] = useState<any>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+
   const fetchAsset = async () => {
+
     try {
       setLoading(true);
       const res = await fetch(`/api/studio/assets/${assetId}`);
@@ -477,6 +489,63 @@ export default function StudioAssetEditorPage() {
     }
   };
 
+  const fetchPublishPreview = async (accountId: string) => {
+    const acc = connectedAccounts.find((a) => a.id === accountId);
+    if (!acc) return;
+    try {
+      setLoadingPreview(true);
+      const res = await fetch(`/api/studio/assets/${assetId}/publish/preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          versionId: selectedVersionId,
+          connectedAccountId: accountId,
+          platform: acc.platform,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPublishPreview(data);
+      }
+    } catch {
+      // preview non-blocking
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
+
+  const handleExecuteHumanReview = async () => {
+    if (!humanReviewSummary.trim()) return;
+    try {
+      setHumanReviewing(true);
+      const res = await fetch("/api/reviews/human", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assetId,
+          versionId: selectedVersionId,
+          verdict: humanVerdict,
+          summary: humanReviewSummary.trim(),
+          scores: { overallScore: humanReviewScore },
+        }),
+      });
+      if (res.ok) {
+        setHumanReviewModalOpen(false);
+        setHumanReviewSummary("");
+        setActiveTab("editorial");
+        await fetchAsset();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Human review failed");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error submitting human review");
+    } finally {
+      setHumanReviewing(false);
+    }
+  };
+
   // Phase 7 Publishing Handlers
   const handleOpenPublishModal = async () => {
     try {
@@ -492,7 +561,10 @@ export default function StudioAssetEditorPage() {
             asset?.type.includes("LINKEDIN") ? a.platform === "LINKEDIN" :
             asset?.type.includes("NEWSLETTER") ? a.platform === "NEWSLETTER" : true
           );
-          setSelectedAccountId(match ? match.id : accs[0].id);
+          const chosenId = match ? match.id : accs[0].id;
+          setSelectedAccountId(chosenId);
+          // Preview publication payload
+          setTimeout(() => fetchPublishPreview(chosenId), 50);
         }
       }
       setPublishModalOpen(true);
@@ -500,6 +572,7 @@ export default function StudioAssetEditorPage() {
       console.error(err);
     }
   };
+
 
   const handleExecutePublish = async () => {
     if (!selectedAccountId) return;
@@ -662,6 +735,14 @@ export default function StudioAssetEditorPage() {
           >
             <Save className="w-3.5 h-3.5 text-emerald-400" />
             {saving ? "Saving..." : "Save Version"}
+          </button>
+
+          {/* Human Editorial Review Trigger */}
+          <button
+            onClick={() => setHumanReviewModalOpen(true)}
+            className="bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-xs font-semibold px-3.5 py-2 rounded-lg border border-zinc-700 transition-colors flex items-center gap-1.5"
+          >
+            <span>✍️</span> Human Review
           </button>
 
           {/* AI Editorial Review Trigger */}
@@ -1183,13 +1264,21 @@ export default function StudioAssetEditorPage() {
                         <span className="text-[11px] font-mono uppercase text-amber-400 font-semibold">
                           Open Revision Directives ({latestReview.revisionRequests.filter((r: any) => r.status === "OPEN").length})
                         </span>
-                        <button
-                          onClick={handleApplyRevisionLoop}
-                          disabled={revisionLoopRunning}
-                          className="text-[11px] bg-amber-600 hover:bg-amber-500 text-white font-medium px-2 py-0.5 rounded transition-colors disabled:opacity-50"
-                        >
-                          {revisionLoopRunning ? "Applying..." : "Auto-Fix via Writer"}
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => handleStatusTransition("EDITING")}
+                            className="text-[11px] bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 font-medium px-2 py-0.5 rounded transition-colors"
+                          >
+                            ✍️ Make Manual Revision
+                          </button>
+                          <button
+                            onClick={handleApplyRevisionLoop}
+                            disabled={revisionLoopRunning}
+                            className="text-[11px] bg-amber-600 hover:bg-amber-500 text-white font-medium px-2 py-0.5 rounded transition-colors disabled:opacity-50"
+                          >
+                            {revisionLoopRunning ? "Applying..." : "Auto-Fix via Writer"}
+                          </button>
+                        </div>
                       </div>
                       <div className="space-y-1">
                         {latestReview.revisionRequests.map((rr: any) => (
@@ -1208,14 +1297,22 @@ export default function StudioAssetEditorPage() {
                 <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 text-center space-y-3">
                   <ShieldCheck className="w-8 h-8 text-zinc-600 mx-auto" />
                   <p className="text-xs text-zinc-400">No editorial review recorded yet for this asset.</p>
-                  <button
-                    onClick={handleRunReview}
-                    disabled={reviewRunning}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors"
-                  >
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                    {reviewRunning ? "Running Review..." : "Run AI Review Now"}
-                  </button>
+                  <div className="flex items-center justify-center gap-2">
+                    <button
+                      onClick={() => setHumanReviewModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-xs font-semibold border border-zinc-700 transition-colors"
+                    >
+                      <span>✍️</span> Human Review
+                    </button>
+                    <button
+                      onClick={handleRunReview}
+                      disabled={reviewRunning}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      {reviewRunning ? "Running Review..." : "Run AI Review Now"}
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -1885,7 +1982,10 @@ export default function StudioAssetEditorPage() {
                     </label>
                     <select
                       value={selectedAccountId}
-                      onChange={(e) => setSelectedAccountId(e.target.value)}
+                      onChange={(e) => {
+                        setSelectedAccountId(e.target.value);
+                        fetchPublishPreview(e.target.value);
+                      }}
                       className="w-full bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 p-2.5 rounded-lg focus:outline-none focus:border-blue-500 font-mono"
                     >
                       {connectedAccounts.map((acc) => (
@@ -1914,6 +2014,21 @@ export default function StudioAssetEditorPage() {
                       <span className="font-mono text-zinc-300">{blocks.length} sections</span>
                     </div>
                   </div>
+
+                  {/* Payload Preview */}
+                  {publishPreview && (
+                    <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-zinc-300">Payload Preview</span>
+                        <span className="text-[10px] font-mono bg-zinc-800 text-zinc-300 px-1.5 py-0.5 rounded">
+                          {publishPreview.characterCount} characters
+                        </span>
+                      </div>
+                      <div className="bg-zinc-900/80 p-2.5 rounded border border-zinc-800/80 text-[11px] font-mono text-zinc-300 max-h-36 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+                        {publishPreview.formattedText || "(Empty content)"}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1931,6 +2046,100 @@ export default function StudioAssetEditorPage() {
                 >
                   <Send className={`w-3.5 h-3.5 ${publishing ? "animate-spin" : ""}`} />
                   {publishing ? "Publishing..." : "Execute Human Publish"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Human Editorial Review Modal */}
+      {humanReviewModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">✍️</span>
+                <h2 className="text-base font-bold text-white">Human Editorial Review</h2>
+              </div>
+              <button onClick={() => setHumanReviewModalOpen(false)} className="text-zinc-400 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-lg space-y-1 text-zinc-400">
+                <div className="font-semibold text-zinc-200">Reviewing: {asset.title} (v{selectedVersion.versionNumber})</div>
+                <p className="text-[11px]">Human editorial verdict sets asset status to REVIEW_PASSED or REVISION_REQUIRED. Final approval gate remains a separate explicit step.</p>
+              </div>
+
+              <div>
+                <label className="block font-medium text-zinc-300 mb-1.5">Verdict *</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["PASS", "REQUEST_REVISION", "FAIL"] as const).map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setHumanVerdict(v)}
+                      className={`p-2 rounded-lg border text-center font-medium transition-all text-xs ${
+                        humanVerdict === v
+                          ? v === "PASS"
+                            ? "bg-emerald-950/70 border-emerald-600 text-emerald-300 ring-1 ring-emerald-500"
+                            : v === "REQUEST_REVISION"
+                            ? "bg-amber-950/70 border-amber-600 text-amber-300 ring-1 ring-amber-500"
+                            : "bg-red-950/70 border-red-600 text-red-300 ring-1 ring-red-500"
+                          : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                      }`}
+                    >
+                      {v.replace("_", " ")}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-medium text-zinc-300 mb-1">
+                  Editorial Score (1-100)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={humanReviewScore}
+                  onChange={(e) => setHumanReviewScore(Number(e.target.value))}
+                  className="w-full bg-zinc-950 border border-zinc-800 text-zinc-100 p-2.5 rounded-lg focus:outline-none focus:border-blue-500 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block font-medium text-zinc-300 mb-1">
+                  Review Summary & Editorial Notes *
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="e.g. Structure is sound and claims are accurate. Hook has high retention potential."
+                  value={humanReviewSummary}
+                  onChange={(e) => setHumanReviewSummary(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 text-zinc-100 p-2.5 rounded-lg focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setHumanReviewModalOpen(false)}
+                  className="px-3.5 py-2 rounded-lg bg-zinc-800 text-zinc-300 font-medium hover:bg-zinc-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExecuteHumanReview}
+                  disabled={humanReviewing || !humanReviewSummary.trim()}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-500 disabled:opacity-50"
+                >
+                  {humanReviewing ? "Submitting..." : "Submit Review"}
                 </button>
               </div>
             </div>

@@ -1,4 +1,5 @@
 import prisma from "../db/prisma";
+import { WriterService } from "./writer-service";
 
 export const CONTENT_STATUSES = [
   "DRAFT",
@@ -86,6 +87,142 @@ export class ContentStudioService {
     });
 
     return asset;
+  }
+
+  /**
+   * Creates a complete draft asset manually, initializing Version 1 with human-authored blocks.
+   * Enables the complete authoring lifecycle (DRAFT -> EDITING -> READY_FOR_REVIEW) without AI.
+   */
+  static async createManualDraft(data: {
+    workspaceId: string;
+    brandId?: string;
+    campaignId: string;
+    strategyId?: string;
+    type: string;
+    title: string;
+    createdBy?: string;
+    initialBlocks?: Array<{
+      blockType: string;
+      orderIndex?: number;
+      title?: string | null;
+      content: string;
+      example?: string | null;
+      transition?: string | null;
+      statementType?: string;
+      claimId?: string | null;
+      citationText?: string | null;
+    }>;
+  }) {
+    const asset = await this.createAsset({
+      workspaceId: data.workspaceId,
+      brandId: data.brandId,
+      campaignId: data.campaignId,
+      strategyId: data.strategyId,
+      type: data.type,
+      title: data.title,
+      createdBy: data.createdBy,
+    });
+
+    const blocksToSave =
+      data.initialBlocks && data.initialBlocks.length > 0
+        ? data.initialBlocks.map((b, i) => ({
+            blockType: b.blockType,
+            orderIndex: b.orderIndex ?? i,
+            title: b.title || null,
+            content: b.content,
+            example: b.example || null,
+            transition: b.transition || null,
+            statementType: b.statementType || "FACT",
+            claimId: b.claimId || null,
+            citationText: b.citationText || null,
+          }))
+        : [
+            {
+              blockType: "HOOK",
+              orderIndex: 0,
+              title: "Opening / Hook",
+              content: `Initial draft for "${data.title}" authored by ${data.createdBy || "Operator"}.`,
+              example: null,
+              transition: null,
+              statementType: "OPINION",
+              claimId: null,
+              citationText: null,
+            },
+          ];
+
+    // Initialize Version 1 atomically
+    const nextVersion = await prisma.$transaction(async (tx) => {
+      const version = await tx.contentVersion.create({
+        data: {
+          assetId: asset.id,
+          versionNumber: 1,
+          changeSummary: "Initial human draft creation",
+          sourceType: "MANUAL_EDIT",
+          author: data.createdBy || "Operator",
+          contentSnapshot: JSON.stringify({
+            blocksCount: blocksToSave.length,
+            isManualDraft: true,
+          }),
+        },
+      });
+
+      for (let i = 0; i < blocksToSave.length; i++) {
+        const b = blocksToSave[i];
+        const createdBlock = await tx.contentBlock.create({
+          data: {
+            versionId: version.id,
+            blockType: b.blockType,
+            orderIndex: b.orderIndex ?? i,
+            title: b.title,
+            content: b.content,
+            example: b.example,
+            transition: b.transition,
+            statementType: b.statementType || "FACT",
+            unsupportedFlag: b.statementType === "FACT" && !b.claimId,
+          },
+        });
+
+        if (b.claimId) {
+          await tx.claimReference.create({
+            data: {
+              versionId: version.id,
+              blockId: createdBlock.id,
+              claimId: b.claimId,
+              citationText: b.citationText || null,
+              isGrounded: true,
+            },
+          });
+        }
+      }
+
+      await tx.contentAsset.update({
+        where: { id: asset.id },
+        data: {
+          currentVersionId: version.id,
+          status: "DRAFT",
+        },
+      });
+
+      return version;
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        workspaceId: data.workspaceId,
+        action: "MANUAL_DRAFT_CREATED",
+        entityType: "ContentAsset",
+        entityId: asset.id,
+        detailsJson: JSON.stringify({
+          title: asset.title,
+          type: asset.type,
+          versionNumber: 1,
+          versionId: nextVersion.id,
+          blocksCount: blocksToSave.length,
+        }),
+      },
+    });
+
+    return await this.getAsset(asset.id, data.workspaceId);
   }
 
   /**
@@ -426,5 +563,37 @@ export class ContentStudioService {
 
     return version;
   }
+
+  /**
+   * Manually edit blocks of a content asset, automatically creating a new version.
+   */
+  static async editContentBlocks(input: {
+    workspaceId: string;
+    assetId: string;
+    userId?: string;
+    changeSummary?: string;
+    blocks: Array<{
+      id?: string;
+      blockType: string;
+      orderIndex?: number;
+      title?: string | null;
+      content: string;
+      example?: string | null;
+      transition?: string | null;
+      statementType?: string;
+      claimId?: string | null;
+      citationText?: string | null;
+    }>;
+  }) {
+    const formattedBlocks = input.blocks.map((b, idx) => ({
+      ...b,
+      orderIndex: b.orderIndex ?? idx,
+    }));
+    return await WriterService.saveManualEdit({
+      ...input,
+      blocks: formattedBlocks,
+    });
+  }
 }
+
 

@@ -345,10 +345,10 @@ export default function AnalyticsPage() {
 
           <button
             onClick={() => setShowIngestModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-xs font-semibold rounded-lg border border-zinc-700 transition"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-100 text-xs font-semibold rounded-lg border border-zinc-700 transition"
           >
-            <Plus className="w-4 h-4 text-blue-400" />
-            Ingest Metrics
+            <span>✍️</span>
+            Import Metrics Manually
           </button>
 
           <button

@@ -418,4 +418,124 @@ export class PublishingService {
       },
     });
   }
+
+  /**
+   * Generates a preview of the publication payload before final publishing.
+   * Shows formatted content, character count, target platform, connected account, and approval status.
+   */
+  static async previewPublishPayload(input: {
+    workspaceId: string;
+    brandId: string;
+    assetId: string;
+    versionId: string;
+    connectedAccountId: string;
+    platform: string;
+    userId: string;
+  }) {
+    const { workspaceId, brandId, assetId, versionId, connectedAccountId, platform } = input;
+
+    // Check Connected Account
+    const account = await prisma.connectedAccount.findUnique({
+      where: { id: connectedAccountId },
+    });
+
+    if (!account || account.workspaceId !== workspaceId || account.brandId !== brandId) {
+      throw new AuthorizationError("Connected account not found in workspace/brand", 404, "NOT_FOUND");
+    }
+
+    const asset = await prisma.contentAsset.findUnique({
+      where: { id: assetId },
+      include: {
+        brand: true,
+        campaign: true,
+        versions: {
+          where: { id: versionId },
+          include: {
+            blocks: { orderBy: { orderIndex: "asc" } },
+          },
+        },
+      },
+    });
+
+    if (!asset || asset.workspaceId !== workspaceId) {
+      throw new AuthorizationError("Content asset not found in workspace", 404, "NOT_FOUND");
+    }
+
+    const targetVersion = asset.versions[0];
+    if (!targetVersion) {
+      throw new Error(`ContentVersion ${versionId} does not belong to asset ${assetId}`);
+    }
+
+    // Active human approval check
+    const activeApproval = await prisma.approvalRecord.findFirst({
+      where: {
+        contentAssetId: asset.id,
+        contentVersionId: targetVersion.id,
+        action: "HUMAN_APPROVED",
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const isVersionCurrent = asset.currentVersionId === versionId;
+    const isApproved = asset.status === "APPROVED" && isVersionCurrent && !!activeApproval;
+
+    // Build payload blocks
+    const publishBlocks: PublishBlock[] = targetVersion.blocks.map((b) => ({
+      blockType: b.blockType,
+      orderIndex: b.orderIndex,
+      title: b.title,
+      content: b.content,
+      example: b.example,
+      transition: b.transition,
+    }));
+
+    const payload: PublishPayload = {
+      title: asset.title,
+      format: asset.type,
+      versionNumber: targetVersion.versionNumber,
+      blocks: publishBlocks,
+      description: targetVersion.changeSummary,
+      tags: ["MediaOS", asset.type],
+      metadata: {
+        campaignId: asset.campaignId,
+        strategyId: asset.strategyId,
+      },
+    };
+
+    // Calculate formatted text & character count
+    const formattedText = publishBlocks.map((b) => b.content).join("\n\n");
+    const characterCount = formattedText.length;
+
+    const idempotencyKey = this.generatePublishingIdempotencyKey(
+      workspaceId,
+      assetId,
+      versionId,
+      platform,
+      connectedAccountId
+    );
+
+    return {
+      assetId: asset.id,
+      assetTitle: asset.title,
+      assetType: asset.type,
+      versionId: targetVersion.id,
+      versionNumber: targetVersion.versionNumber,
+      platform: platform.toUpperCase(),
+      account: sanitizeAccountDTO(account),
+      payload,
+      formattedText,
+      characterCount,
+      isApproved,
+      approvalDetails: activeApproval
+        ? {
+            approvedAt: activeApproval.createdAt,
+            approvedBy: activeApproval.userId,
+            action: activeApproval.action,
+            comment: activeApproval.comment,
+          }
+        : null,
+      idempotencyKey,
+    };
+  }
 }
+
