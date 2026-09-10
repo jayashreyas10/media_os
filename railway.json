@@ -5,7 +5,7 @@
     "buildCommand": "node scripts/prepare-db.js && npx prisma generate && npm run build"
   },
   "deploy": {
-    "startCommand": "node scripts/prepare-db.js && node scripts/db-preflight.js && npm start",
+    "startCommand": "node scripts/prepare-db.js && npx prisma generate && npx prisma db push && npm start",
     "healthcheckPath": "/api/health",
     "healthcheckTimeout": 120,
     "restartPolicyType": "ON_FAILURE",
