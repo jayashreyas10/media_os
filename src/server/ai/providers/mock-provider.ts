@@ -14,11 +14,13 @@ import {
   EditorialReviewOutputSchema,
   LearningEngineOutputSchema,
 } from "../schemas/agent-outputs";
+import { assertAIEnabled } from "../guard";
 
 export class MockAIProvider implements AIProvider {
   readonly name = "mock";
 
   async generate(request: AgentRunRequest): Promise<AgentRunResult> {
+    assertAIEnabled();
     const startTime = Date.now();
     const promptVersion = request.promptVersion || "v1.0";
     const topic = request.context.campaignTitle || "AI Agents in Production Engineering";

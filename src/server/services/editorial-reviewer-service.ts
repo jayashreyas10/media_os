@@ -1,6 +1,6 @@
 import prisma from "../db/prisma";
 import { ContextBuilder } from "../ai/context-builder";
-import { MockAIProvider } from "../ai/providers/mock-provider";
+import { ProviderFactory } from "../ai/provider-factory";
 import {
   EditorialFinding,
   EditorialReviewOutput,
@@ -245,7 +245,7 @@ export class EditorialReviewerService {
     };
 
     // --- 2. AI EDITORIAL REVIEW DISPATCH ---
-    const provider = new MockAIProvider();
+    const provider = await ProviderFactory.getProvider({ workspaceId });
     const aiResult = await provider.generate({
       agentType: "EDITOR",
       context: {

@@ -4,20 +4,10 @@ import { MockAIProvider } from "./providers/mock-provider";
 import { GeminiProvider } from "./providers/gemini-provider";
 import { OpenAIProvider } from "./providers/openai-provider";
 import { AnthropicProvider } from "./providers/anthropic-provider";
+import { AIDisabledError, assertAIEnabled, isAIDisabled } from "./guard";
 
+export { AIDisabledError, assertAIEnabled, isAIDisabled };
 export type AIMode = "LIVE" | "MOCK" | "DISABLED";
-
-export class AIDisabledError extends Error {
-  statusCode = 503;
-  code = "AI_ASSISTANCE_DISABLED";
-
-  constructor(
-    message = "AI assistance is currently disabled. All workflows are fully available via manual mode."
-  ) {
-    super(message);
-    this.name = "AIDisabledError";
-  }
-}
 
 export interface ProviderSelectionOptions {
   workspaceId?: string;
@@ -25,20 +15,38 @@ export interface ProviderSelectionOptions {
 }
 
 export class ProviderFactory {
-  private static mockInstance = new MockAIProvider();
+  private static mockInstance: MockAIProvider | null = null;
+
+  private static getMockInstance(): MockAIProvider {
+    if (!this.mockInstance) {
+      this.mockInstance = new MockAIProvider();
+    }
+    return this.mockInstance;
+  }
+
+  /**
+   * Returns true if AI operations are explicitly or globally disabled.
+   */
+  static isAIDisabled(): boolean {
+    return isAIDisabled();
+  }
+
+  /**
+   * Assertion guard: throws AIDisabledError if AI is disabled.
+   */
+  static assertAIEnabled(workspaceId?: string): void {
+    assertAIEnabled();
+  }
 
   /**
    * Resolves current AI operational mode: LIVE, MOCK, or DISABLED.
    */
   static async getAIMode(workspaceId?: string): Promise<AIMode> {
-    const envMode = (process.env.AI_MODE || "").toUpperCase().trim();
-    if (
-      envMode === "DISABLED" ||
-      process.env.AI_PROVIDER === "disabled" ||
-      process.env.AI_DISABLED === "true"
-    ) {
+    if (this.isAIDisabled()) {
       return "DISABLED";
     }
+
+    const envMode = (process.env.AI_MODE || "").toUpperCase().trim();
     if (envMode === "LIVE") return "LIVE";
     if (envMode === "MOCK") return "MOCK";
 
@@ -86,7 +94,7 @@ export class ProviderFactory {
     const mode = await this.getAIMode(workspaceId);
     let label = "Mock / Demo Mode";
     if (mode === "DISABLED") {
-      label = "Disabled (Manual Mode)";
+      label = "Manual Mode — AI Disabled";
     } else if (mode === "LIVE") {
       label = "Live AI Enabled";
     }
@@ -107,6 +115,8 @@ export class ProviderFactory {
    * If LIVE, returns the configured provider.
    */
   static async getProvider(options?: ProviderSelectionOptions): Promise<AIProvider> {
+    assertAIEnabled();
+
     if (options?.preferredProvider === "disabled") {
       throw new AIDisabledError();
     }
@@ -145,7 +155,7 @@ export class ProviderFactory {
     }
 
     // Default zero-cost offline mock provider
-    return this.mockInstance;
+    return this.getMockInstance();
   }
 
   /**

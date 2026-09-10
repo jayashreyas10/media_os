@@ -24,9 +24,9 @@ export function AIStatusBadge() {
       })
       .catch(() => {
         setStatus({
-          mode: "MOCK",
-          label: "Mock Mode",
-          provider: "mock",
+          mode: "DISABLED",
+          label: "Manual Mode — AI Disabled",
+          provider: "none",
           manualAvailable: true,
         });
         setLoading(false);
@@ -49,15 +49,15 @@ export function AIStatusBadge() {
           text: "AI Ready",
           icon: <Sparkles className="w-3 h-3 text-emerald-400" />,
         };
-      case "MOCK":
-        return {
-          dotColor: "bg-amber-400",
-          textColor: "text-amber-300",
-          bgColor: "bg-amber-950/40 border-amber-800/60",
-          text: "AI Mock / Fallback",
-          icon: <AlertCircle className="w-3 h-3 text-amber-400" />,
-        };
       case "DISABLED":
+        return {
+          dotColor: "bg-zinc-400",
+          textColor: "text-zinc-300",
+          bgColor: "bg-zinc-900 border-zinc-700",
+          text: "Manual Mode — AI Disabled",
+          icon: <ShieldCheck className="w-3 h-3 text-zinc-400" />,
+        };
+      case "MOCK":
       default:
         return {
           dotColor: "bg-zinc-400",

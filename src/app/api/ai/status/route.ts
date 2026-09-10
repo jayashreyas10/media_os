@@ -14,10 +14,11 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     return NextResponse.json(
       {
-        mode: "MOCK",
-        label: "Mock / Demo Mode",
-        provider: "mock",
+        mode: "DISABLED",
+        label: "Manual Mode — AI Disabled",
+        provider: "none",
         manualAvailable: true,
+        manualWorkflowsAvailable: true,
       },
       { status: 200 }
     );

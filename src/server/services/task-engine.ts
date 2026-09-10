@@ -327,7 +327,8 @@ export class TaskEngine {
         },
       });
 
-      const isExhausted = currentAttempt >= task.maxAttempts;
+      const isAIDisabled = err instanceof Error && (err.name === "AIDisabledError" || err.message.includes("AI assistance is currently disabled"));
+      const isExhausted = isAIDisabled || currentAttempt >= task.maxAttempts;
       const newStatus = isExhausted ? "FAILED" : "QUEUED";
 
       const updatedTask = await prisma.task.update({

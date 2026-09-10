@@ -1,4 +1,5 @@
 import { AIProvider, AgentRunRequest, AgentRunResult } from "../provider-interface";
+import { assertAIEnabled } from "../guard";
 import {
   SignalScoutOutputSchema,
   ResearchOutputSchema,
@@ -19,6 +20,7 @@ export class OpenAIProvider implements AIProvider {
   }
 
   async generate(request: AgentRunRequest): Promise<AgentRunResult> {
+    assertAIEnabled();
     const startTime = Date.now();
     const promptVersion = request.promptVersion || "v1.0";
 

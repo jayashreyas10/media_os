@@ -105,6 +105,17 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ task });
   } catch (err) {
+    if (err instanceof Error && (err.name === "AIDisabledError" || err.message.includes("AI assistance is currently disabled"))) {
+      return NextResponse.json(
+        {
+          error: err.message,
+          code: "AI_ASSISTANCE_DISABLED",
+          manualAvailable: true,
+        },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Failed to queue task" },
       { status: 400 }
