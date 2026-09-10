@@ -22,4 +22,18 @@ if (dbUrl.startsWith("postgres://") || dbUrl.startsWith("postgresql://")) {
     fs.writeFileSync(schemaPath, schema, "utf8");
     console.log("[prepare-db] schema.prisma updated for SQLite.");
   }
+  // Ensure DATABASE_URL exists in .env if not set in environment
+  const envPath = path.join(__dirname, "../.env");
+  if (!process.env.DATABASE_URL) {
+    process.env.DATABASE_URL = "file:./dev.db";
+    console.log("[prepare-db] DATABASE_URL missing from environment. Defaulted to file:./dev.db");
+    if (!fs.existsSync(envPath)) {
+      fs.writeFileSync(envPath, 'DATABASE_URL="file:./dev.db"\n', "utf8");
+    } else {
+      let envContent = fs.readFileSync(envPath, "utf8");
+      if (!envContent.includes("DATABASE_URL=")) {
+        fs.appendFileSync(envPath, '\nDATABASE_URL="file:./dev.db"\n', "utf8");
+      }
+    }
+  }
 }
