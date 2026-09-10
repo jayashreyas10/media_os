@@ -1,0 +1,870 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String            @id @default(uuid())
+  email         String            @unique
+  name          String
+  passwordHash  String
+  role          String            @default("OPERATOR") // OWNER, OPERATOR, VIEWER
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  sessions      Session[]
+  memberships   WorkspaceMember[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
+  approvalRecords ApprovalRecord[]
+  strategyRecommendations StrategyRecommendation[]
+  oauthStates     OAuthState[]
+  connectedAccounts ConnectedAccount[]
+  publishingRecords PublishingRecord[]
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Workspace {
+  id              String             @id @default(uuid())
+  name            String
+  slug            String             @unique
+  ownerId         String
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  members         WorkspaceMember[]
+  brands          Brand[]
+  tasks           Task[]
+  auditLogs       AuditLog[]
+  notifications   Notification[]
+  providerConfigs AIProviderConfig[]
+  knowledgeItems  KnowledgeItem[]
+  knowledgeTags   KnowledgeTag[]
+  sources         Source[]
+  claims          Claim[]
+  contentAssets   ContentAsset[]
+  editorialReviews EditorialReview[]
+  approvalRecords ApprovalRecord[]
+  metricSnapshots MetricSnapshot[]
+  learningRecords LearningRecord[]
+  strategyRecommendations StrategyRecommendation[]
+  oauthStates     OAuthState[]
+  connectedAccounts ConnectedAccount[]
+  publishingRecords PublishingRecord[]
+  metricSyncJobs    MetricSyncJob[]
+}
+
+model WorkspaceMember {
+  id          String    @id @default(uuid())
+  workspaceId String
+  userId      String
+  role        String    @default("MEMBER")
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+}
+
+model Brand {
+  id             String          @id @default(uuid())
+  workspaceId    String
+  name           String
+  slug           String
+  description    String?
+  tagline        String?
+  isDefault      Boolean         @default(false)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  identity       BrandIdentity?
+  audience       AudienceProfile?
+  voice          BrandVoice?
+  pillars        ContentPillar[]
+  goals          Goal[]
+  offers         Offer[]
+  proofs         Proof[]
+  editorialRules EditorialRule[]
+  campaigns      Campaign[]
+  knowledgeItems KnowledgeItem[]
+  contentAssets  ContentAsset[]
+  editorialReviews EditorialReview[]
+  approvalRecords ApprovalRecord[]
+  metricSnapshots MetricSnapshot[]
+  learningRecords LearningRecord[]
+  strategyRecommendations StrategyRecommendation[]
+  oauthStates     OAuthState[]
+  connectedAccounts ConnectedAccount[]
+  publishingRecords PublishingRecord[]
+  metricSyncJobs    MetricSyncJob[]
+
+  @@unique([workspaceId, slug])
+}
+
+model BrandIdentity {
+  id          String   @id @default(uuid())
+  brandId     String   @unique
+  mission     String
+  vision      String?
+  positioning String
+  values      String
+  brand       Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+}
+
+model AudienceProfile {
+  id             String   @id @default(uuid())
+  brandId        String   @unique
+  targetAudience String
+  painPoints     String
+  desires        String
+  objections     String
+  brand          Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+}
+
+model BrandVoice {
+  id               String   @id @default(uuid())
+  brandId          String   @unique
+  tone             String
+  styleGuidelines  String
+  forbiddenWords   String
+  signaturePhrases String
+  brand            Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+}
+
+model ContentPillar {
+  id          String   @id @default(uuid())
+  brandId     String
+  name        String
+  description String
+  priority    Int      @default(1)
+  weight      Int      @default(20)
+  brand       Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+}
+
+model Goal {
+  id          String   @id @default(uuid())
+  brandId     String
+  objective   String
+  keyResult   String
+  targetDate  String?
+  status      String   @default("ACTIVE")
+  brand       Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+}
+
+model Offer {
+  id               String   @id @default(uuid())
+  brandId          String
+  name             String
+  valueProposition String
+  targetSegment    String?
+  pricingModel     String?
+  brand            Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+}
+
+model Proof {
+  id                 String   @id @default(uuid())
+  brandId            String
+  claim              String
+  evidenceSnippet    String
+  sourceUrl          String?
+  verificationStatus String   @default("VERIFIED")
+  brand              Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+}
+
+model EditorialRule {
+  id          String   @id @default(uuid())
+  brandId     String
+  rule        String
+  category    String   // TONE, FACT_CHECKING, FORMAT, LEGAL
+  severity    String   @default("WARNING") // CRITICAL, WARNING, SUGGESTION
+  rationale   String?
+  brand       Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+}
+
+model KnowledgeItem {
+  id          String    @id @default(uuid())
+  workspaceId String
+  brandId     String?
+  title       String
+  content     String
+  type        String    @default("NOTE") // NOTE, DOCUMENT, URL, TRANSCRIPT, EXAMPLE, CAMPAIGN, RESEARCH, PLAYBOOK
+  sourceUrl   String?
+  tags        String?   // comma-separated tags
+  status      String    @default("ACTIVE") // ACTIVE, ARCHIVED
+  confidence  Int       @default(100)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand       Brand?    @relation(fields: [brandId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, type])
+}
+
+model KnowledgeTag {
+  id          String    @id @default(uuid())
+  workspaceId String
+  name        String
+  color       String    @default("#3b82f6")
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, name])
+}
+
+model Source {
+  id              String     @id @default(uuid())
+  workspaceId     String
+  title           String
+  url             String?
+  author          String?
+  publisher       String?
+  publishDate     String?
+  sourceType      String     @default("DOCUMENTATION") // PRIMARY_BENCHMARK, DOCUMENTATION, PEER_REVIEWED_PAPER, INDUSTRY_SURVEY, SYNTHETIC_DEMONSTRATION
+  trustScore      Int        @default(85) // 1-100
+  retrievalStatus String     @default("FETCHED") // FETCHED, CACHED, FAILED, SYNTHETIC
+  retrievedAt     DateTime   @default(now())
+  rawContent      String?    // Ground-truth retrieved content for quote verification
+  isSynthetic     Boolean    @default(false)
+  sourceNotes     String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  workspace       Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  claims          Claim[]
+  evidence        Evidence[]
+
+  @@index([workspaceId])
+}
+
+model Claim {
+  id                 String     @id @default(uuid())
+  workspaceId        String
+  campaignId         String?
+  primarySourceId    String?
+  claimText          String
+  confidence         Int        @default(90) // 1-100 (AI self-reported confidence; not proof)
+  isFact             Boolean    @default(true)
+  verificationStatus String     @default("UNVERIFIED") // VERIFIED, UNVERIFIED, CONTRADICTED, UNRESOLVED
+  contradictionNote  String?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  workspace          Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaign           Campaign?  @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  primarySource      Source?    @relation(fields: [primarySourceId], references: [id], onDelete: SetNull)
+  evidence           Evidence[]
+  claimReferences    ClaimReference[]
+
+  @@index([workspaceId])
+  @@index([campaignId])
+}
+
+model Evidence {
+  id                 String   @id @default(uuid())
+  claimId            String
+  sourceId           String
+  quoteSnippet       String
+  context            String?
+  pageOrTimestamp    String?
+  supportStance      String   @default("SUPPORTS") // SUPPORTS, CONTRADICTS, CONTEXTUALIZES, DOES_NOT_SUPPORT
+  isQuoteVerified    Boolean  @default(false)      // Verifiably extracted from source.rawContent
+  groundingScore     Int      @default(100)        // 0-100 grounding certainty against source text
+  verificationMethod String   @default("PRIMARY_SOURCE") // PRIMARY_SOURCE, EMPIRICAL_DATA, EXPERT_CONSENSUS
+  createdAt          DateTime @default(now())
+  claim              Claim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  source             Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([claimId])
+  @@index([sourceId])
+}
+
+model Campaign {
+  id           String                @id @default(uuid())
+  brandId      String
+  title        String
+  slug         String
+  stage        String                @default("DISCOVERY")
+  priority     String                @default("MEDIUM")
+  targetDate   DateTime?
+  brief        String?
+  metadataJson String?
+  isDemo       Boolean               @default(false)
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  brand        Brand                 @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  stageHistory CampaignStageHistory[]
+  tasks        Task[]
+  claims       Claim[]
+  strategy     Strategy?
+  contentAssets ContentAsset[]
+  editorialReviews EditorialReview[]
+  approvalRecords ApprovalRecord[]
+  metricSnapshots MetricSnapshot[]
+  learningRecords LearningRecord[]
+  strategyRecommendations StrategyRecommendation[]
+  publishingRecords PublishingRecord[]
+
+  @@index([brandId, stage])
+}
+
+model CampaignStageHistory {
+  id               String   @id @default(uuid())
+  campaignId       String
+  fromStage        String
+  toStage          String
+  reason           String?
+  transitionedById String?
+  createdAt        DateTime @default(now())
+  campaign         Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+}
+
+model Task {
+  id             String           @id @default(uuid())
+  workspaceId    String
+  campaignId     String?
+  taskType       String
+  agentName      String
+  status         String           @default("QUEUED") // QUEUED, RUNNING, WAITING, COMPLETED, FAILED, CANCELLED, NEEDS_REVIEW
+  priority       String           @default("NORMAL")
+  idempotencyKey String?          @unique
+  inputJson      String
+  outputJson     String?
+  errorMessage   String?
+  attemptCount   Int              @default(0)
+  maxAttempts    Int              @default(3)
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  workspace      Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaign       Campaign?        @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  attempts       TaskAttempt[]
+  agentRuns      AgentRun[]
+  dependencies   TaskDependency[] @relation("TaskDependencies")
+  dependentTasks TaskDependency[] @relation("DependentTasks")
+
+  @@index([workspaceId, status])
+  @@index([campaignId])
+}
+
+model TaskDependency {
+  id             String   @id @default(uuid())
+  taskId         String
+  dependsOnTaskId String
+  requiredStatus String   @default("COMPLETED")
+  createdAt      DateTime @default(now())
+  task           Task     @relation("TaskDependencies", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOnTask  Task     @relation("DependentTasks", fields: [dependsOnTaskId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, dependsOnTaskId])
+  @@index([taskId])
+  @@index([dependsOnTaskId])
+}
+
+model TaskAttempt {
+  id            String   @id @default(uuid())
+  taskId        String
+  attemptNumber Int
+  status        String
+  error         String?
+  durationMs    Int
+  createdAt     DateTime @default(now())
+  task          Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+model AIProviderConfig {
+  id               String    @id @default(uuid())
+  workspaceId      String
+  providerName     String
+  modelName        String
+  isDefault        Boolean   @default(true)
+  maxDailyCost     Float     @default(10.0)
+  currentDailyCost Float     @default(0.0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, providerName])
+}
+
+model AgentRun {
+  id               String   @id @default(uuid())
+  taskId           String?
+  agentName        String
+  provider         String
+  model            String
+  promptVersion    String
+  inputTokens      Int      @default(0)
+  outputTokens     Int      @default(0)
+  estimatedCostUsd Float    @default(0.0)
+  durationMs       Int
+  status           String
+  createdAt        DateTime @default(now())
+  task             Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([agentName])
+}
+
+model AuditLog {
+  id          String    @id @default(uuid())
+  workspaceId String
+  userId      String?
+  action      String
+  entityType  String
+  entityId    String?
+  detailsJson String?
+  ipAddress   String?
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+}
+
+model Notification {
+  id          String    @id @default(uuid())
+  workspaceId String
+  userId      String?
+  title       String
+  message     String
+  type        String    @default("INFO")
+  read        Boolean   @default(false)
+  actionUrl   String?
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, read])
+}
+
+model Strategy {
+  id               String         @id @default(uuid())
+  campaignId       String         @unique
+  primaryHeadline  String
+  thesis           String
+  centralTension   String
+  targetReader     String?
+  desiredOutcome   String?
+  flagshipFormat   String?
+  outlineJson      String?
+  distributionJson String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  campaign         Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contentAssets    ContentAsset[]
+
+  @@index([campaignId])
+}
+
+model ContentAsset {
+  id                  String           @id @default(uuid())
+  workspaceId         String
+  brandId             String
+  campaignId          String
+  strategyId          String?
+  type                String           // YOUTUBE_LONG_FORM, YOUTUBE_SHORT, NEWSLETTER, X_THREAD, LINKEDIN_POST, GENERIC_SOCIAL
+  title               String
+  status              String           @default("DRAFT") // DRAFT, GENERATED, EDITING, READY_FOR_REVIEW, APPROVED, ARCHIVED
+  currentVersionId    String?
+  qualityMetadataJson String?          // Readability, duration, wordCount, evidenceCoverage, warnings
+  createdBy           String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  workspace           Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand               Brand            @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  campaign            Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  strategy            Strategy?        @relation(fields: [strategyId], references: [id], onDelete: SetNull)
+  versions            ContentVersion[]
+  editorialReviews    EditorialReview[]
+  approvalRecords     ApprovalRecord[]
+  metricSnapshots     MetricSnapshot[]
+  learningRecords     LearningRecord[]
+  publishingRecords   PublishingRecord[]
+
+  @@index([workspaceId, status])
+  @@index([campaignId])
+  @@index([brandId])
+}
+
+model ContentVersion {
+  id              String           @id @default(uuid())
+  assetId         String
+  versionNumber   Int
+  changeSummary   String
+  sourceType      String           @default("AI_GENERATED") // AI_GENERATED, MANUAL_EDIT, RESTORED, REWRITE_SELECTION
+  author          String?
+  contentSnapshot String           // Full structured snapshot JSON
+  createdAt       DateTime         @default(now())
+  asset           ContentAsset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  blocks          ContentBlock[]
+  claimReferences ClaimReference[]
+  editorialReviews EditorialReview[]
+  revisionRequests RevisionRequest[]
+  approvalRecords  ApprovalRecord[]
+  publishingRecords PublishingRecord[]
+
+  @@unique([assetId, versionNumber])
+  @@index([assetId])
+}
+
+model ContentBlock {
+  id              String           @id @default(uuid())
+  versionId       String
+  blockType       String           // HOOK, PROMISE, CONTEXT, CHAPTER, TRANSITION, CONCLUSION, CTA, SECTION, TWEET, PARAGRAPH
+  orderIndex      Int
+  title           String?
+  content         String
+  example         String?
+  transition      String?
+  statementType   String           @default("FACT") // FACT, INFERENCE, OPINION, RECOMMENDATION
+  unsupportedFlag Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  version         ContentVersion   @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  claimReferences ClaimReference[]
+  revisionRequests RevisionRequest[]
+
+  @@index([versionId, orderIndex])
+}
+
+model ClaimReference {
+  id           String         @id @default(uuid())
+  versionId    String
+  blockId      String?
+  claimId      String
+  citationText String?
+  isGrounded   Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  version      ContentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  block        ContentBlock?  @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  claim        Claim          @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  @@index([versionId])
+  @@index([blockId])
+  @@index([claimId])
+}
+
+model EditorialReview {
+  id               String            @id @default(uuid())
+  workspaceId      String
+  brandId          String
+  campaignId       String
+  contentAssetId   String
+  contentVersionId String
+  reviewerType     String            @default("AI_EDITOR") // AI_EDITOR, HUMAN
+  status           String            @default("PENDING") // PENDING, RUNNING, PASSED, REVISION_REQUIRED, FAILED, CANCELLED
+  verdict          String?           // PASS, REQUEST_REVISION, FAIL, FLAGGED
+  overallScore     Int?              // 0-100
+  scoresJson       String?           // { evidenceScore, brandScore, qualityScore, formatScore }
+  summary          String?
+  findingsJson     String?           // Array of structured findings
+  metricsJson      String?           // Diagnostic checks metrics
+  createdAt        DateTime          @default(now())
+  completedAt      DateTime?
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand            Brand             @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  campaign         Campaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contentAsset     ContentAsset      @relation(fields: [contentAssetId], references: [id], onDelete: Cascade)
+  contentVersion   ContentVersion    @relation(fields: [contentVersionId], references: [id], onDelete: Cascade)
+  revisionRequests RevisionRequest[]
+  approvalRecords  ApprovalRecord[]
+
+  @@index([workspaceId, status])
+  @@index([contentAssetId])
+  @@index([contentVersionId])
+}
+
+model RevisionRequest {
+  id               String          @id @default(uuid())
+  reviewId         String
+  contentVersionId String
+  blockId          String?
+  category         String          // EVIDENCE, BRAND_VOICE, QUALITY, FORMAT
+  severity         String          @default("WARNING") // INFO, WARNING, ERROR, CRITICAL
+  instruction      String
+  status           String          @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, DISMISSED
+  createdAt        DateTime        @default(now())
+  resolvedAt       DateTime?
+  review           EditorialReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  contentVersion   ContentVersion  @relation(fields: [contentVersionId], references: [id], onDelete: Cascade)
+  block            ContentBlock?   @relation(fields: [blockId], references: [id], onDelete: SetNull)
+
+  @@index([reviewId])
+  @@index([contentVersionId])
+  @@index([blockId])
+}
+
+model ApprovalRecord {
+  id               String           @id @default(uuid())
+  workspaceId      String
+  brandId          String
+  campaignId       String
+  contentAssetId   String
+  contentVersionId String
+  userId           String?
+  reviewId         String?
+  action           String           // REVIEW_STARTED, REVIEW_PASSED, REVISION_REQUESTED, REVISION_CREATED, HUMAN_APPROVED, HUMAN_REJECTED, APPROVAL_REVOKED
+  comment          String?
+  reason           String?
+  createdAt        DateTime         @default(now())
+  workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand            Brand            @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  campaign         Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contentAsset     ContentAsset     @relation(fields: [contentAssetId], references: [id], onDelete: Cascade)
+  contentVersion   ContentVersion   @relation(fields: [contentVersionId], references: [id], onDelete: Cascade)
+  user             User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  review           EditorialReview? @relation(fields: [reviewId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([contentAssetId, contentVersionId])
+  @@index([userId])
+}
+
+model MetricSnapshot {
+  id                     String        @id @default(uuid())
+  workspaceId            String
+  brandId                String
+  campaignId             String?
+  contentAssetId         String?
+  idempotencyKey         String?       @unique
+  platform               String        // YOUTUBE, X, LINKEDIN, NEWSLETTER, GENERIC
+  periodStart            DateTime
+  periodEnd              DateTime
+  snapshotDate           DateTime      @default(now())
+
+  // Observed Raw Metrics (Immutable historical observations)
+  impressions            Int           @default(0)
+  views                  Int           @default(0)
+  engagements            Int           @default(0)
+  likes                  Int           @default(0)
+  comments               Int           @default(0)
+  shares                 Int           @default(0)
+  clicks                 Int           @default(0)
+  watchTimeSeconds       Float         @default(0.0)
+  conversions            Int           @default(0)
+  subscribersGained      Int           @default(0)
+
+  // Derived Metrics (Calculated separately, never overwriting raw values)
+  ctr                    Float         @default(0.0)
+  engagementRate         Float         @default(0.0)
+  avgViewDurationSeconds Float         @default(0.0)
+  retentionRate          Float         @default(0.0)
+  conversionRate         Float         @default(0.0)
+
+  // Provenance & Integrity
+  isSynthetic            Boolean       @default(false)
+  syntheticLabel         String?       // E.g. "SYNTHETIC / DEMONSTRATION DATA"
+  dataSource             String        @default("MANUAL_INGESTION") // SYNTHETIC_GENERATOR, MANUAL_INGESTION, CSV_IMPORT, API_MOCK
+  metricProvenanceJson   String?       // Ingestion metadata, timestamps, external IDs, platform version
+  metadataJson           String?       // E.g. pillar, topic, hook text, CTA text, format
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+
+  workspace              Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand                  Brand         @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  campaign               Campaign?     @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  contentAsset           ContentAsset? @relation(fields: [contentAssetId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, brandId])
+  @@index([campaignId])
+  @@index([contentAssetId])
+  @@index([platform, snapshotDate])
+}
+
+model LearningRecord {
+  id                      String                   @id @default(uuid())
+  workspaceId             String
+  brandId                 String
+  campaignId              String?
+  contentAssetId          String?
+  category                String                   // TOPIC, HOOK, FORMAT, PILLAR, CTA, RETENTION, ENGAGEMENT, PUBLISHING_TIME
+  sentiment               String                   // WINNING, WEAK, NEUTRAL, OPPORTUNITY
+  observation             String                   // Empirical observation
+  hypothesis              String?                  // Mechanism / context
+  sampleSize              Int                      // N units analyzed
+  confidenceScore         Int                      // 1-100 (AI self-reported confidence)
+  statisticalSignificance String                   @default("DIRECTIONAL") // STATISTICALLY_SIGNIFICANT, DIRECTIONAL, ANECDOTAL, ELIGIBLE_FOR_TESTING
+  supportingMetricsJson   String                   // Raw metrics backing observation
+  limitations             String                   // Caveats, confounders, sample size warnings
+  dataSourcesJson         String?                  // E.g. ["SYNTHETIC / DEMONSTRATION DATA", "YOUTUBE"]
+  status                  String                   @default("ACTIVE") // ACTIVE, ARCHIVED, SUPERSEDED
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+
+  workspace               Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand                   Brand                    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  campaign                Campaign?                @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  contentAsset            ContentAsset?            @relation(fields: [contentAssetId], references: [id], onDelete: SetNull)
+  recommendations         StrategyRecommendation[]
+
+  @@index([workspaceId, brandId])
+  @@index([category, sentiment])
+}
+
+model StrategyRecommendation {
+  id                  String         @id @default(uuid())
+  workspaceId         String
+  brandId             String
+  campaignId          String?
+  learningId          String
+  title               String
+  recommendation      String         // Actionable guidance for future strategy
+  targetPillar        String?
+  targetFormat        String?
+  actionType          String         // KEEP, TEST, STOP, DOUBLE_DOWN, MODIFY_HOOK, ADJUST_CTA
+  status              String         @default("PENDING") // PENDING, ACCEPTED, REJECTED, APPLIED, DISMISSED
+  reviewNotes         String?
+  reviewedBy          String?
+  reviewedAt          DateTime?
+  appliedToCampaignId String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  workspace           Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand               Brand          @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  campaign            Campaign?      @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  learning            LearningRecord @relation(fields: [learningId], references: [id], onDelete: Cascade)
+  reviewer            User?          @relation(fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, brandId, status])
+  @@index([learningId])
+}
+
+model OAuthState {
+  id           String    @id @default(uuid())
+  workspaceId  String
+  brandId      String
+  userId       String
+  platform     String    // YOUTUBE, X, LINKEDIN, NEWSLETTER, GENERIC_WEBHOOK
+  stateToken   String    @unique
+  codeVerifier String?
+  redirectUri  String
+  expiresAt    DateTime
+  used         Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand        Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, brandId])
+  @@index([stateToken])
+}
+
+model ConnectedAccount {
+  id                    String             @id @default(uuid())
+  workspaceId           String
+  brandId               String
+  connectedById         String?
+  platform              String             // YOUTUBE, X, LINKEDIN, NEWSLETTER, GENERIC_WEBHOOK
+  accountName           String             // E.g. "Apex Media Channel", "@apexmedia"
+  accountId             String             // External channel or account ID
+  accountEmail          String?
+  encryptedAccessToken  String             // AES-256-GCM encrypted token
+  encryptedRefreshToken String?            // AES-256-GCM encrypted refresh token
+  tokenExpiresAt        DateTime?
+  scope                 String?            // Granted scopes
+  status                String             @default("ACTIVE") // ACTIVE, EXPIRED, REVOKED, ERROR
+  metadataJson          String?            // Sanitized channel metadata (subscribers, avatar)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  workspace             Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand                 Brand              @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  connectedBy           User?              @relation(fields: [connectedById], references: [id], onDelete: SetNull)
+  publishingRecords     PublishingRecord[]
+  metricSyncJobs        MetricSyncJob[]
+
+  @@unique([brandId, platform, accountId])
+  @@index([workspaceId, brandId])
+  @@index([platform, status])
+}
+
+model PublishingRecord {
+  id                  String            @id @default(uuid())
+  workspaceId         String
+  brandId             String
+  campaignId          String?
+  contentAssetId      String
+  contentVersionId    String
+  connectedAccountId  String?
+  platform            String            // YOUTUBE, X, LINKEDIN, NEWSLETTER, GENERIC_WEBHOOK
+  status              String            @default("QUEUED") // QUEUED, PUBLISHING, PUBLISHED, FAILED, CANCELLED
+  publishedByUserId   String?
+  idempotencyKey      String            @unique
+  externalPostId      String?
+  externalPostUrl     String?
+  publishAttempts     Int               @default(0)
+  maxAttempts         Int               @default(3)
+  lastError           String?
+  payloadSnapshotJson String            // Full published payload snapshot
+  publishedAt         DateTime?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  workspace           Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand               Brand             @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  campaign            Campaign?         @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  contentAsset        ContentAsset      @relation(fields: [contentAssetId], references: [id], onDelete: Cascade)
+  contentVersion      ContentVersion    @relation(fields: [contentVersionId], references: [id], onDelete: Cascade)
+  connectedAccount    ConnectedAccount? @relation(fields: [connectedAccountId], references: [id], onDelete: SetNull)
+  publishedByUser     User?             @relation(fields: [publishedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, brandId])
+  @@index([contentAssetId, contentVersionId])
+  @@index([status, createdAt])
+}
+
+model MetricSyncJob {
+  id                   String            @id @default(uuid())
+  workspaceId          String
+  brandId              String
+  connectedAccountId   String?
+  platform             String            // YOUTUBE, X, LINKEDIN, NEWSLETTER
+  status               String            @default("PENDING") // PENDING, SYNCING, COMPLETED, FAILED, SKIPPED
+  attemptCount         Int               @default(0)
+  maxAttempts          Int               @default(3)
+  periodStart          DateTime
+  periodEnd            DateTime
+  syncedSnapshotsCount Int               @default(0)
+  idempotencyKey       String?           @unique
+  lastError            String?
+  startedAt            DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  workspace            Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand                Brand             @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  connectedAccount     ConnectedAccount? @relation(fields: [connectedAccountId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, brandId])
+  @@index([status, createdAt])
+  @@index([connectedAccountId])
+}
+
+model WorkerLock {
+  id         String   @id @default(uuid())
+  lockKey    String   @unique
+  holderId   String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([lockKey, expiresAt])
+}
+
+
+
+

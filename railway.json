@@ -1,0 +1,14 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "node scripts/prepare-db.js && npx prisma generate && npm run build"
+  },
+  "deploy": {
+    "startCommand": "node scripts/prepare-db.js && npx prisma db push && npm start",
+    "healthcheckPath": "/api/health",
+    "healthcheckTimeout": 120,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}

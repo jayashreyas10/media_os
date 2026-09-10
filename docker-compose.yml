@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  mediaos:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mediaos-app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:/app/prisma/dev.db
+      - SESSION_SECRET=production-grade-session-secret-min-32-chars-key
+      - AI_PROVIDER_DEFAULT=mock
+    volumes:
+      - mediaos_data:/app/prisma
+    restart: unless-stopped
+
+volumes:
+  mediaos_data:
