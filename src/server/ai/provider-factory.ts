@@ -8,7 +8,7 @@ import { AnthropicProvider } from "./providers/anthropic-provider";
 export type AIMode = "LIVE" | "MOCK" | "DISABLED";
 
 export class AIDisabledError extends Error {
-  statusCode = 400;
+  statusCode = 503;
   code = "AI_ASSISTANCE_DISABLED";
 
   constructor(
@@ -32,7 +32,11 @@ export class ProviderFactory {
    */
   static async getAIMode(workspaceId?: string): Promise<AIMode> {
     const envMode = (process.env.AI_MODE || "").toUpperCase().trim();
-    if (envMode === "DISABLED" || process.env.AI_PROVIDER === "disabled") {
+    if (
+      envMode === "DISABLED" ||
+      process.env.AI_PROVIDER === "disabled" ||
+      process.env.AI_DISABLED === "true"
+    ) {
       return "DISABLED";
     }
     if (envMode === "LIVE") return "LIVE";
@@ -92,6 +96,7 @@ export class ProviderFactory {
       label,
       provider: mode === "DISABLED" ? "none" : (process.env.AI_PROVIDER || "mock"),
       manualAvailable: true,
+      manualWorkflowsAvailable: true,
     };
   }
 

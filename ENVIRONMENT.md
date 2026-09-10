@@ -1,55 +1,54 @@
-# MediaOS Environment Variables & Secrets Reference
+# MediaOS Production Environment Configuration Matrix
 
-All supported environment configuration options and security specifications:
-
----
-
-## 1. Core Production Variables
-
-| Variable | Description | Default | Required in Production |
-|---|---|---|---|
-| `DATABASE_URL` | Database connection string. SQLite path (`file:./dev.db`) or PostgreSQL URL (`postgresql://user:pass@host:5432/dbname`). | `file:./dev.db` | **Yes** |
-| `SESSION_SECRET` | 32+ character random secret used for HMAC session signing and JWT creation. | Development fallback | **Yes** |
-| `ENCRYPTION_SECRET_KEY` | Exactly 32 bytes (64 hexadecimal characters) for AES-256-GCM token encryption at rest. Never logged. | Development fallback | **Yes** |
-| `NODE_ENV` | Runtime environment mode (`development`, `production`, `test`). | `development` | **Yes** (`production`) |
-| `APP_URL` | Canonical production domain URL (e.g. `https://mediaos.yourdomain.com`). Prevents localhost OAuth redirects. | Request origin fallback | **Yes** |
-| `NEXT_PUBLIC_APP_URL` | Client-accessible canonical URL (e.g. `https://mediaos.yourdomain.com`). | Empty | Optional |
-| `PORT` | Web server listening port. | `3000` | No |
+This document defines every environment variable verified and actively referenced across the MediaOS codebase.
 
 ---
 
-## 2. Platform OAuth & External Publishing Credentials
+## 1. Definitive Environment Matrix
 
-*Leave empty to run in safe `[MOCK / DEMONSTRATION MODE]`. When set, real OAuth handshakes and publishing are active.*
-
-| Variable | Platform | Description |
-|---|---|---|
-| `GOOGLE_CLIENT_ID` / `YOUTUBE_CLIENT_ID` | YouTube Data API v3 | Google OAuth 2.0 Client ID |
-| `GOOGLE_CLIENT_SECRET` / `YOUTUBE_CLIENT_SECRET` | YouTube Data API v3 | Google OAuth 2.0 Client Secret |
-| `TWITTER_CLIENT_ID` / `X_CLIENT_ID` | Twitter / X API v2 | Twitter OAuth 2.0 Client ID (User Context / PKCE) |
-| `TWITTER_CLIENT_SECRET` / `X_CLIENT_SECRET` | Twitter / X API v2 | Twitter OAuth 2.0 Client Secret |
-| `LINKEDIN_CLIENT_ID` | LinkedIn | LinkedIn OAuth 2.0 Client ID |
-| `LINKEDIN_CLIENT_SECRET` | LinkedIn | LinkedIn OAuth 2.0 Client Secret |
+| Variable | Required? | Secret? | Purpose | Example Format | Safe Default? | Failure Behavior |
+| :--- | :---: | :---: | :--- | :--- | :--- | :--- |
+| **`NODE_ENV`** | **Yes** | No | Controls runtime behavior, logging verbosity, and cookie security flags. | `production` | `"development"` | Insecure cookies permitted; development debug logging enabled. |
+| **`DATABASE_URL`** | **Yes** | **Yes** | Connection string for PostgreSQL in production or SQLite in development/testing. | `postgresql://user:pass@host:5432/db` | `file:./dev.db` | Application startup halts immediately during preflight check with exit code 1. |
+| **`APP_URL`** | **Yes** | No | Canonical public origin used to construct deterministic OAuth redirect URIs and absolute resource links. | `https://mediaos.up.railway.app` | `http://localhost:3000` | OAuth callbacks default to localhost origin, breaking external provider redirects. |
+| **`NEXT_PUBLIC_APP_URL`** | Optional | No | Client-side accessible fallback origin for frontend navigation and OAuth initiation. | `https://mediaos.up.railway.app` | Fallback to `window.location.origin` or `APP_URL` | Defaults to window location in browser. |
+| **`SESSION_SECRET`** | **Yes** | **Yes** | Cryptographic key used to sign session cookies and authenticate user sessions. | 64 hex chars or 32+ char string | Fallback to dev secret in development | In production, if missing, falls back to `ENCRYPTION_SECRET_KEY`; if both missing, halts startup. |
+| **`ENCRYPTION_SECRET_KEY`** | **Yes** | **Yes** | 256-bit key for AES-256-GCM encryption of OAuth access & refresh tokens at rest. | `a1b2c3d4...` (64 hex characters) | Dev key (dev only) | In production, missing key throws fatal `CRITICAL SECURITY ERROR` on server boot. |
+| **`AI_DISABLED`** | Optional | No | Master killswitch for all external AI provider calls and mock generation. | `true` or `false` | `false` | When `true`, automated AI calls throw HTTP 503 `AIDisabledError`. Manual workflows remain 100% operational. |
+| **`AI_PROVIDER_DEFAULT`** | Optional | No | Selects default AI provider engine when AI is enabled. | `mock`, `openai`, `anthropic`, `gemini` | `"mock"` | Uses mock provider if credentials are not configured or if explicitly set to `mock`. |
+| **`AI_MODE`** | Optional | No | Explicit operational override: `LIVE`, `MOCK`, or `DISABLED`. | `DISABLED` | Resolved dynamically | If omitted, resolves automatically based on `AI_DISABLED` and available API keys. |
+| **`OPENAI_API_KEY`** | Optional | **Yes** | API key for OpenAI GPT-4o provider. | `sk-proj-...` | None | OpenAI provider marked unavailable; falls back to mock or throws if OpenAI specifically requested. |
+| **`ANTHROPIC_API_KEY`** | Optional | **Yes** | API key for Anthropic Claude 3.5 Sonnet provider. | `sk-ant-api03-...` | None | Anthropic provider marked unavailable; falls back to mock or throws if Claude specifically requested. |
+| **`GEMINI_API_KEY`** | Optional | **Yes** | API key for Google Gemini 1.5 Pro provider. | `AIzaSy...` | None | Gemini provider marked unavailable; falls back to mock or throws if Gemini specifically requested. |
+| **`GOOGLE_CLIENT_ID`** / `YOUTUBE_CLIENT_ID` | Optional | No | Google OAuth 2.0 Client ID for YouTube Data API publishing and metric sync. | `123456789.apps.googleusercontent.com` | None | YouTube integration operates in `[MOCK / DEMONSTRATION MODE]`. |
+| **`GOOGLE_CLIENT_SECRET`** / `YOUTUBE_CLIENT_SECRET` | Optional | **Yes** | Google OAuth 2.0 Client Secret for YouTube token exchange. | `GOCSPX-...` | None | YouTube integration operates in `[MOCK / DEMONSTRATION MODE]`. |
+| **`TWITTER_CLIENT_ID`** / `X_CLIENT_ID` | Optional | No | Twitter/X OAuth 2.0 Client ID (supports PKCE S256). | `T1Zz...` | None | X integration operates in `[MOCK / DEMONSTRATION MODE]`. |
+| **`TWITTER_CLIENT_SECRET`** / `X_CLIENT_SECRET` | Optional | **Yes** | Twitter/X OAuth 2.0 Client Secret for confidential token exchange. | `xyz...` | None | X integration operates in `[MOCK / DEMONSTRATION MODE]`. |
+| **`LINKEDIN_CLIENT_ID`** | Optional | No | LinkedIn OAuth 2.0 Client ID for page and profile posting. | `86abc...` | None | LinkedIn integration operates in `[MOCK / DEMONSTRATION MODE]`. |
+| **`LINKEDIN_CLIENT_SECRET`** | Optional | **Yes** | LinkedIn OAuth 2.0 Client Secret for token exchange. | `secret...` | None | LinkedIn integration operates in `[MOCK / DEMONSTRATION MODE]`. |
+| **`PORT`** | Optional | No | Port on which the HTTP server listens. | `3000` | `3000` | Automatically assigned by Railway/cloud platform. Defaults to `3000`. |
 
 ---
 
-## 3. AI Provider Configuration
+## 2. Minimal Required Variables for Production Deployment
 
-| Variable | Description | Default | Required |
-|---|---|---|---|
-| `AI_PROVIDER_DEFAULT` | Active AI provider (`mock`, `gemini`, `openai`, `anthropic`). Set to `mock` for deterministic local development and tests. | `mock` | No |
-| `GEMINI_API_KEY` | Google Gemini API key. | `""` | When using Gemini |
-| `OPENAI_API_KEY` | OpenAI API key. | `""` | When using OpenAI |
-| `ANTHROPIC_API_KEY` | Anthropic Claude API key. | `""` | When using Anthropic |
+For a secure production deployment with full manual mode operational and mock social channels:
+
+```bash
+NODE_ENV=production
+DATABASE_URL=postgresql://user:password@host:5432/railway
+APP_URL=https://your-service.up.railway.app
+SESSION_SECRET=a_secure_random_64_character_hex_string
+ENCRYPTION_SECRET_KEY=a_secure_random_64_character_hex_string
+AI_DISABLED=true   # Set to true for 100% manual operations; false when adding live keys
+```
 
 ---
 
-## 4. Rate Limiting & Deployment Topologies
+## 3. Variable Validation & Diagnostic Preflight
 
-- **Single-Instance Deployment (Default / VPS / Docker)**:
-  - Token-bucket rate limiting operates in Node.js process memory via `RateLimiter`.
-  - Quotas (`AUTH: 10/min`, `RESEARCH: 20/min`, `GENERATION: 15/min`, `PUBLISHING: 10/min`, `METRICS_INGESTION: 30/min`, `ANALYTICS_SYNC: 10/min`, `GENERAL: 60/min`) are strictly enforced per tenant (`workspaceId`).
-- **Multi-Instance / Horizontally Scaled Deployment (Kubernetes / Multi-Pod Railway)**:
-  - When running multiple stateless web replicas behind a load balancer, each pod tracks its local in-memory token bucket.
-  - To enforce unified global cluster limits across replicas, attach a shared Redis instance or distributed rate limiter adapter.
-  - Distributed worker lease locking via database `WorkerLock` remains 100% globally consistent across any number of replicas.
+MediaOS includes automated verification on server initialization via `scripts/db-preflight.js` and `validateEncryptionConfig()`:
+
+1. **`DATABASE_URL` check**: Confirms presence and validates PostgreSQL / SQLite format.
+2. **`ENCRYPTION_SECRET_KEY` check**: Confirms key is exactly 32 bytes (64 hex or 32 raw bytes). In `NODE_ENV=production`, server boot crashes with a diagnostic error if invalid.
+3. **Telemetry Redaction**: All logged environment variables, headers, and traces automatically mask secret keys (`SESSION_SECRET`, `ENCRYPTION_SECRET_KEY`, `DATABASE_URL` credentials, `API_KEY`, `CLIENT_SECRET`).

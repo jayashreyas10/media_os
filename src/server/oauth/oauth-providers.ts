@@ -193,6 +193,85 @@ export class OAuthProviderRegistry {
         };
       }
 
+      case "X": {
+        const clientId = process.env.X_CLIENT_ID || process.env.TWITTER_CLIENT_ID || "";
+        const clientSecret = process.env.X_CLIENT_SECRET || process.env.TWITTER_CLIENT_SECRET || "";
+
+        const params = new URLSearchParams({
+          code,
+          grant_type: "authorization_code",
+          client_id: clientId,
+          redirect_uri: redirectUri,
+          code_verifier: codeVerifier || "challenge",
+        });
+
+        const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+        const res = await fetch("https://api.twitter.com/2/oauth2/token", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Authorization: `Basic ${basicAuth}`,
+          },
+          body: params.toString(),
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`X/Twitter OAuth token exchange failed: HTTP ${res.status} - ${errText}`);
+        }
+
+        const data = await res.json();
+        return {
+          accessToken: data.access_token,
+          refreshToken: data.refresh_token,
+          expiresInSeconds: data.expires_in || 7200,
+          accountId: `x_prod_${crypto.randomBytes(6).toString("hex")}`,
+          accountName: "X Production Account",
+          isMock: false,
+          rawResponseMetadata: {
+            tokenType: data.token_type,
+            scope: data.scope,
+          },
+        };
+      }
+
+      case "LINKEDIN": {
+        const clientId = process.env.LINKEDIN_CLIENT_ID || "";
+        const clientSecret = process.env.LINKEDIN_CLIENT_SECRET || "";
+
+        const params = new URLSearchParams({
+          grant_type: "authorization_code",
+          code,
+          client_id: clientId,
+          client_secret: clientSecret,
+          redirect_uri: redirectUri,
+        });
+
+        const res = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: params.toString(),
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`LinkedIn OAuth token exchange failed: HTTP ${res.status} - ${errText}`);
+        }
+
+        const data = await res.json();
+        return {
+          accessToken: data.access_token,
+          refreshToken: data.refresh_token,
+          expiresInSeconds: data.expires_in || 5184000,
+          accountId: `linkedin_prod_${crypto.randomBytes(6).toString("hex")}`,
+          accountName: "LinkedIn Production Organization",
+          isMock: false,
+          rawResponseMetadata: {
+            scope: data.scope,
+          },
+        };
+      }
+
       default:
         throw new Error(`Live token exchange not implemented for platform ${platform}`);
     }

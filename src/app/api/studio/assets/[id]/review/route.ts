@@ -48,7 +48,7 @@ export async function POST(
           code: "AI_ASSISTANCE_DISABLED",
           manualAvailable: true,
         },
-        { status: 400 }
+        { status: 503 }
       );
     }
 

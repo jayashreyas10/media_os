@@ -26,6 +26,13 @@ const SENSITIVE_KEYS = new Set([
   "codeverifier",
   "statetoken",
   "privatekey",
+  "database_url",
+  "databaseurl",
+  "session_secret",
+  "sessionsecret",
+  "encryption_secret_key",
+  "encryptionsecretkey",
+  "token_encryption_key",
 ]);
 
 /**
@@ -37,15 +44,24 @@ export function sanitizeAttributes(data: unknown, depth = 0): unknown {
   }
 
   if (typeof data === "string") {
+    let sanitized = data;
+
     // Redact bearer tokens or authorization headers
-    if (/bearer\s+[a-zA-Z0-9_\-\.]+/i.test(data)) {
-      return data.replace(/bearer\s+[a-zA-Z0-9_\-\.]+/gi, "Bearer [REDACTED]");
+    if (/bearer\s+[a-zA-Z0-9_\-\.]+/i.test(sanitized)) {
+      sanitized = sanitized.replace(/bearer\s+[a-zA-Z0-9_\-\.]+/gi, "Bearer [REDACTED]");
     }
+
+    // Redact database credentials in connection strings
+    if (/postgres(ql)?:\/\/[^:]+:([^@]+)@/i.test(sanitized)) {
+      sanitized = sanitized.replace(/(postgres(?:ql)?:\/\/[^:]+:)([^@]+)(@)/gi, "$1[REDACTED]$3");
+    }
+
     // Redact suspected JWT or base64 keys
-    if (/^[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*$/.test(data) && data.length > 40) {
+    if (/^[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*$/.test(sanitized) && sanitized.length > 40) {
       return "[REDACTED_JWT]";
     }
-    return data;
+
+    return sanitized;
   }
 
   if (Array.isArray(data)) {
@@ -56,7 +72,17 @@ export function sanitizeAttributes(data: unknown, depth = 0): unknown {
     const sanitized: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
       const lowerKey = key.toLowerCase();
-      if (SENSITIVE_KEYS.has(lowerKey) || lowerKey.includes("token") || lowerKey.includes("secret") || lowerKey.includes("password")) {
+      if (
+        SENSITIVE_KEYS.has(lowerKey) ||
+        lowerKey.includes("token") ||
+        lowerKey.includes("secret") ||
+        lowerKey.includes("password") ||
+        lowerKey.includes("database_url") ||
+        lowerKey.includes("databaseurl") ||
+        lowerKey.includes("encryption_key") ||
+        lowerKey.includes("apikey") ||
+        lowerKey.includes("api_key")
+      ) {
         sanitized[key] = "[REDACTED]";
       } else {
         sanitized[key] = sanitizeAttributes(value, depth + 1);
