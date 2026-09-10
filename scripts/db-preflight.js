@@ -102,11 +102,9 @@ async function main() {
     ]);
 
     if (workspaces === -1 || workerLocks === -1 || publishingRecords === -1) {
-      console.warn("[db-preflight] Notice: One or more tables are not initialized yet.");
-      if (isSqlite) {
-        console.log("[db-preflight] Applying safe SQLite schema push...");
-        execSync("npx prisma db push --skip-generate", { stdio: "inherit" });
-      }
+      console.warn("[db-preflight] Notice: One or more operational tables are not initialized yet.");
+      console.log("[db-preflight] Applying safe schema sync to initialize tables...");
+      execSync("npx prisma db push --skip-generate", { stdio: "inherit" });
     } else {
       console.log(`[db-preflight] Operational tables verified: Workspaces=${workspaces}, WorkerLocks=${workerLocks}, PublishingRecords=${publishingRecords}`);
     }
