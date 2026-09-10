@@ -1,5 +1,0 @@
-[phases.install]
-cmds = ["npm ci --include=dev"]
-
-[variables]
-NPM_CONFIG_PRODUCTION = "false"
